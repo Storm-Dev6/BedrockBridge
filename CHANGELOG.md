@@ -29,3 +29,7 @@ A projekt a [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) formátumot
 - Immutable inbound/outbound packet pipeline, typed context és dinamikus packet dispatcher.
 - Registry-driven protocol session packet processor trailing-byte és metadata validációval.
 - JMH benchmarkok packet encode/decode, registry lookup és pipeline throughput mérésére.
+- Bedrock/RakNet transport handshake packet catalog a ping/pong, open connection, connection request, incoming és disconnect packetekkel.
+- Offline magic, IPv4/IPv6 address és teljes datagram serializer/deserializer bounds és trailing-byte validációval.
+- Fail-closed RakNet protocol version negotiation, MTU/security/GUID validation és handshake state machine.
+- Bedrock UDP session bootstrap, connection timeout, connected ping/pong keepalive válasz és determinisztikus disconnect lifecycle.

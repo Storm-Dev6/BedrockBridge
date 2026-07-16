@@ -10,6 +10,15 @@ public interface PacketWriter {
     /** Writes a signed big-endian integer. */
     void writeInt(int value);
 
+    /** Writes a signed big-endian long. */
+    void writeLong(long value);
+
+    /** Writes an unsigned big-endian short. */
+    void writeUnsignedShort(int value);
+
+    /** Writes a boolean as zero or one. */
+    void writeBoolean(boolean value);
+
     /** Writes a nonnegative variable-length integer. */
     void writeVarInt(int value);
 

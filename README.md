@@ -1,6 +1,6 @@
 # BedrockBridge
 
-BedrockBridge egy önálló, Java 21-alapú Minecraft Bedrock–Java bridge. A repository jelenleg a **Phase 2.5 — Protocol Framework** állapotban van: az NIO/RakNet transportmag mellett elkészült az edition-semleges packet, codec, registry, pipeline, versioning és protocol-session keretrendszer; konkrét Bedrock- és Java-packetek még nincsenek.
+BedrockBridge egy önálló, Java 21-alapú Minecraft Bedrock–Java bridge. A repository jelenleg a **Phase 3 — Bedrock Protocol Foundation** állapotban van: a saját NIO/RakNet stack és az általános protocol framework felett elkészült a Bedrock transport-kapcsolat handshake-je; Minecraft login vagy játék még nincs.
 
 ## Követelmények
 
@@ -50,7 +50,12 @@ A Phase 1 alkalmazás kizárólag a konfigurációt validálja, felépíti az in
 | `packet-pipeline` | immutable inbound/outbound stage chain és switch nélküli dispatcher |
 | `protocol-session` | protocol state machine, registry-driven processor és session routing |
 | `protocol-benchmarks` | JMH encode, decode, registry lookup és pipeline throughput benchmarkok |
+| `bedrock-common` | Bedrock/RakNet handshake konstansok, packet ID-k és validation error |
+| `bedrock-packets` | a tíz kezdeti offline/connected transport handshake packet |
+| `bedrock-codec` | Bedrock packet catalog, serializer/deserializer és semantic validation |
+| `bedrock-login` | version negotiation és transport login state machine |
+| `bedrock-session` | UDP session bootstrap, timeout, keepalive response és connection lifecycle |
 
 ## Projektfázis
 
-Phase 0, Phase 0.5 és Phase 1 elfogadott; Phase 2 és Phase 2.5 review-ra vár. A framework nem tartalmaz Bedrock vagy Java packetet. Bedrock login, titkosítás, resource pack, Java protokoll és gameplay fordítás csak későbbi, külön jóváhagyott fázisban kezdődhet.
+Phase 0–2.5 elfogadott; Phase 3 review-ra vár. A Bedrock támogatás csak RakNet transportkapcsolatot hoz létre. Minecraft login chain, Xbox Live, encryption, resource pack, play packetek, Java protokoll és gameplay fordítás csak későbbi, külön jóváhagyott fázisban kezdődhet.

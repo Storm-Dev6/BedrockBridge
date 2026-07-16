@@ -15,6 +15,11 @@ rootProject.name = "BedrockBridge"
 include(
     "application",
     "api",
+    "bedrock-codec",
+    "bedrock-common",
+    "bedrock-login",
+    "bedrock-packets",
+    "bedrock-session",
     "common",
     "config",
     "network-core",

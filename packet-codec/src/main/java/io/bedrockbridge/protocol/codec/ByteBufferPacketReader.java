@@ -27,6 +27,27 @@ public final class ByteBufferPacketReader implements PacketReader {
     }
 
     @Override
+    public long readLong() {
+        require(Long.BYTES);
+        return input.getLong();
+    }
+
+    @Override
+    public int readUnsignedShort() {
+        require(Short.BYTES);
+        return Short.toUnsignedInt(input.getShort());
+    }
+
+    @Override
+    public boolean readBoolean() {
+        byte value = readByte();
+        if (value != 0 && value != 1) {
+            throw new IllegalArgumentException("Boolean must be encoded as zero or one");
+        }
+        return value == 1;
+    }
+
+    @Override
     public int readVarInt() {
         int result = 0;
         for (int index = 0; index < 5; index++) {

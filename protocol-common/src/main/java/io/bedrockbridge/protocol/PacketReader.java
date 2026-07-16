@@ -10,6 +10,15 @@ public interface PacketReader {
     /** Reads a signed big-endian integer. */
     int readInt();
 
+    /** Reads a signed big-endian long. */
+    long readLong();
+
+    /** Reads an unsigned big-endian short. */
+    int readUnsignedShort();
+
+    /** Reads a strict zero/one boolean. */
+    boolean readBoolean();
+
     /** Reads a bounded unsigned variable-length integer. */
     int readVarInt();
 

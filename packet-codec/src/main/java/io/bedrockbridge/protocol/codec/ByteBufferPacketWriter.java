@@ -30,6 +30,26 @@ public final class ByteBufferPacketWriter implements PacketWriter {
     }
 
     @Override
+    public void writeLong(long value) {
+        require(Long.BYTES);
+        output.putLong(value);
+    }
+
+    @Override
+    public void writeUnsignedShort(int value) {
+        if (value < 0 || value > 0xFFFF) {
+            throw new IllegalArgumentException("Unsigned short value is out of range");
+        }
+        require(Short.BYTES);
+        output.putShort((short) value);
+    }
+
+    @Override
+    public void writeBoolean(boolean value) {
+        writeByte((byte) (value ? 1 : 0));
+    }
+
+    @Override
     public void writeVarInt(int value) {
         if (value < 0) {
             throw new IllegalArgumentException("VarInt value must be nonnegative");
