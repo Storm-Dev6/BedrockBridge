@@ -1,0 +1,22 @@
+[versions]
+errorprone = "2.42.0"
+junit = "5.13.4"
+logback = "1.5.18"
+micrometer = "1.15.2"
+slf4j = "2.0.17"
+testcontainers = "1.21.3"
+
+[libraries]
+errorprone-core = { module = "com.google.errorprone:error_prone_core", version.ref = "errorprone" }
+junit-bom = { module = "org.junit:junit-bom", version.ref = "junit" }
+junit-jupiter = { module = "org.junit.jupiter:junit-jupiter" }
+junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher" }
+logback-classic = { module = "ch.qos.logback:logback-classic", version.ref = "logback" }
+micrometer-core = { module = "io.micrometer:micrometer-core", version.ref = "micrometer" }
+slf4j-api = { module = "org.slf4j:slf4j-api", version.ref = "slf4j" }
+testcontainers-bom = { module = "org.testcontainers:testcontainers-bom", version.ref = "testcontainers" }
+testcontainers-junit = { module = "org.testcontainers:junit-jupiter" }
+
+[plugins]
+errorprone = { id = "net.ltgt.errorprone", version = "4.3.0" }
+spotless = { id = "com.diffplug.spotless", version = "7.2.1" }
