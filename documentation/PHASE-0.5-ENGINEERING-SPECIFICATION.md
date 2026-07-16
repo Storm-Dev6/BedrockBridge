@@ -1,6 +1,6 @@
 # BedrockBridge — Phase 0.5 Engineering Specification
 
-**Státusz:** review-ra váró műszaki specifikáció
+**Státusz:** elfogadott műszaki specifikáció
 **Előfeltétel:** elfogadott Phase 0 architektúra
 **Korlát:** ez a dokumentum nem engedélyez implementációt; Phase 1 csak a 0.5 elfogadási kapu után indulhat
 

@@ -1,0 +1,8 @@
+bridge.application-name=BedrockBridge
+bridge.bind-address=0.0.0.0
+bridge.bind-port=19132
+bridge.upstream-address=127.0.0.1
+bridge.upstream-port=25565
+bridge.maximum-sessions=100
+bridge.scheduler-threads=2
+bridge.development-mode=false

@@ -1,6 +1,6 @@
 # BedrockBridge — Phase 0 szoftverarchitektúra
 
-**Státusz:** tervezet, implementációra még nem jóváhagyott
+**Státusz:** elfogadva; a Phase 1 foundation implementáció elkészült és review-ra vár
 **Célplatform:** Minecraft Bedrock és Java Edition 1.21.x
 **Tervezett futtatókörnyezet:** Java 21
 **A dokumentum határa:** kizárólag architektúra; implementációs kódot nem tartalmaz
