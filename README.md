@@ -1,6 +1,6 @@
 # BedrockBridge
 
-BedrockBridge egy önálló, Java 21-alapú Minecraft Bedrock–Java bridge. A repository jelenleg a **Phase 2 — RakNet Core** állapotban van: az infrastruktúra mellett elkészült az önálló NIO/UDP és RakNet transportmag; Bedrock- és Java-protokoll packetek még nincsenek.
+BedrockBridge egy önálló, Java 21-alapú Minecraft Bedrock–Java bridge. A repository jelenleg a **Phase 2.5 — Protocol Framework** állapotban van: az NIO/RakNet transportmag mellett elkészült az edition-semleges packet, codec, registry, pipeline, versioning és protocol-session keretrendszer; konkrét Bedrock- és Java-packetek még nincsenek.
 
 ## Követelmények
 
@@ -44,7 +44,13 @@ A Phase 1 alkalmazás kizárólag a konfigurációt validálja, felépíti az in
 | `udp-transport` | saját, Netty nélküli Java NIO UDP listener/sender |
 | `network-raknet` | frame codec, ACK/NACK, reliability, retransmission, MTU, fragment és ordering |
 | `session` | session/connection manager, timeout, keepalive, tick és disconnect lifecycle |
+| `protocol-common` | generikus packet API, direction/state/version és reader/writer kontraktus |
+| `packet-codec` | bounds-checked ByteBuffer I/O, codec/factory és pooled packet allocator |
+| `packet-registry` | dinamikus packet/codec/ID/state/version/protocol registry és compatibility matrix |
+| `packet-pipeline` | immutable inbound/outbound stage chain és switch nélküli dispatcher |
+| `protocol-session` | protocol state machine, registry-driven processor és session routing |
+| `protocol-benchmarks` | JMH encode, decode, registry lookup és pipeline throughput benchmarkok |
 
 ## Projektfázis
 
-Phase 0, Phase 0.5 és Phase 1 elfogadott. Phase 2 kizárólag transport-szintű RakNet kódot tartalmaz. Bedrock login, titkosítás, Java protokoll és gameplay fordítás csak későbbi, külön jóváhagyott fázisban kezdődhet.
+Phase 0, Phase 0.5 és Phase 1 elfogadott; Phase 2 és Phase 2.5 review-ra vár. A framework nem tartalmaz Bedrock vagy Java packetet. Bedrock login, titkosítás, resource pack, Java protokoll és gameplay fordítás csak későbbi, külön jóváhagyott fázisban kezdődhet.

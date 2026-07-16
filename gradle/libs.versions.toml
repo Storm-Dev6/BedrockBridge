@@ -1,6 +1,7 @@
 [versions]
 errorprone = "2.42.0"
 junit = "5.13.4"
+jmh = "1.37"
 logback = "1.5.18"
 micrometer = "1.15.2"
 slf4j = "2.0.17"
@@ -11,6 +12,8 @@ errorprone-core = { module = "com.google.errorprone:error_prone_core", version.r
 junit-bom = { module = "org.junit:junit-bom", version.ref = "junit" }
 junit-jupiter = { module = "org.junit.jupiter:junit-jupiter" }
 junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher" }
+jmh-core = { module = "org.openjdk.jmh:jmh-core", version.ref = "jmh" }
+jmh-generator = { module = "org.openjdk.jmh:jmh-generator-annprocess", version.ref = "jmh" }
 logback-classic = { module = "ch.qos.logback:logback-classic", version.ref = "logback" }
 micrometer-core = { module = "io.micrometer:micrometer-core", version.ref = "micrometer" }
 slf4j-api = { module = "org.slf4j:slf4j-api", version.ref = "slf4j" }

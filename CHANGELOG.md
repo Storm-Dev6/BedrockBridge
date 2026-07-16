@@ -22,3 +22,10 @@ A projekt a [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) formátumot
 - Bounded split packet fragmenter/reassembler, MTU policy és 32 ordering/sequencing channel.
 - RTT/RTO estimator, recovery queue, ACK/NACK-alapú retransmission és retry limit.
 - Session- és connection manager periodikus tickkel, keepalive-val, timeouttal és disconnect lifecycle-lal.
+- Edition-semleges generikus `Packet` API protocol version, state, direction és encode/decode szerződéssel.
+- Bounds-checked packet reader/writer, codec/encoder/decoder/factory és pooled packet allocator.
+- Switch nélküli dinamikus packet, codec, serializer, deserializer, protocol, version, state és ID registry.
+- Explicit compatibility matrix és fail-closed atomic protocol state machine.
+- Immutable inbound/outbound packet pipeline, typed context és dinamikus packet dispatcher.
+- Registry-driven protocol session packet processor trailing-byte és metadata validációval.
+- JMH benchmarkok packet encode/decode, registry lookup és pipeline throughput mérésére.
