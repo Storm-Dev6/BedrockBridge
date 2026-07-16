@@ -50,4 +50,12 @@ class BedrockDatagramCodecTest {
                 IllegalArgumentException.class,
                 () -> codec.decode(encoded, PacketDirection.SERVERBOUND));
     }
+
+    @Test
+    void compressionRoundTripsAndEnforcesLimits() {
+        var compression = new BedrockCompressionCodec(
+                new CompressionSettings(CompressionAlgorithm.ZLIB, 0, 1024, 4096, 100));
+        byte[] clear = "bedrock-login".repeat(20).getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        assertArrayEquals(clear, compression.decompress(compression.compress(clear)));
+    }
 }

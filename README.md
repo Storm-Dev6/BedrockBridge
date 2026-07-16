@@ -1,6 +1,6 @@
 # BedrockBridge
 
-BedrockBridge egy önálló, Java 21-alapú Minecraft Bedrock–Java bridge. A repository jelenleg a **Phase 3 — Bedrock Protocol Foundation** állapotban van: a saját NIO/RakNet stack és az általános protocol framework felett elkészült a Bedrock transport-kapcsolat handshake-je; Minecraft login vagy játék még nincs.
+BedrockBridge egy önálló, Java 21-alapú Minecraft Bedrock–Java bridge. A repository jelenleg a **Phase 4 — Bedrock Login** állapotban van: a saját NIO/RakNet stack és transport handshake felett elkészült a pinned-root identity chain, client-data hitelesítés, replay protection, ECDH/JWT encryption handshake, authenticated cipher és bounded compression rendszer. Játék még nincs.
 
 ## Követelmények
 
@@ -55,7 +55,9 @@ A Phase 1 alkalmazás kizárólag a konfigurációt validálja, felépíti az in
 | `bedrock-codec` | Bedrock packet catalog, serializer/deserializer és semantic validation |
 | `bedrock-login` | version negotiation és transport login state machine |
 | `bedrock-session` | UDP session bootstrap, timeout, keepalive response és connection lifecycle |
+| `bedrock-auth` | strict JSON/JWT, pinned-root login chain, claims, identity és replay protection |
+| `bedrock-crypto` | P-384 ECDH, ES384 handshake JWT és AES-256/CFB8 packet integrity |
 
 ## Projektfázis
 
-Phase 0–2.5 elfogadott; Phase 3 review-ra vár. A Bedrock támogatás csak RakNet transportkapcsolatot hoz létre. Minecraft login chain, Xbox Live, encryption, resource pack, play packetek, Java protokoll és gameplay fordítás csak későbbi, külön jóváhagyott fázisban kezdődhet.
+Phase 0–3 elfogadott; Phase 4 review-ra vár. A login csak explicit konfigurált, pinned trust root mellett engedélyezett, és nem emulál Xbox Live szolgáltatást. Resource pack, play packetek, Java protokoll és gameplay fordítás csak későbbi, külön jóváhagyott fázisban kezdődhet.

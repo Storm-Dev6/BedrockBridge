@@ -2,7 +2,7 @@
 
 ## Státusz és hatókör
 
-A Phase 3 review-ra vár. Célja kizárólag egy Bedrock kliens RakNet transportkapcsolatának felépítése a saját Phase 2 stack és Phase 2.5 framework felett. Nincs Minecraft login, játékállapot, encryption vagy Xbox Live hitelesítés.
+A Phase 3 elfogadott. Célja kizárólag egy Bedrock kliens RakNet transportkapcsolatának felépítése a saját Phase 2 stack és Phase 2.5 framework felett. A login és encryption a Phase 4 külön rétege; játékállapot továbbra sincs.
 
 ## Modulok
 
