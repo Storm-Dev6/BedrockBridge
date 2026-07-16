@@ -12,6 +12,17 @@ dependencyResolutionManagement {
 
 rootProject.name = "BedrockBridge"
 
-include("application", "api", "common", "config", "observability")
+include(
+    "application",
+    "api",
+    "common",
+    "config",
+    "network-core",
+    "network-raknet",
+    "observability",
+    "packet-buffer",
+    "session",
+    "udp-transport",
+)
 
 includeBuild("build-logic")

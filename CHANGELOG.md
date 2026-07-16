@@ -16,3 +16,9 @@ A projekt a [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) formátumot
 - Konkurens shutdown rekurzió nélküli koordinációja és listenerhiba esetén is garantált erőforrás-takarítás.
 - Gradle wrapper validation és teljes artifact-generálás a CI buildben.
 - Hordozható Gradle runtime policy és a Phase 1 `clean check` elfogadási parancs explicit CI végrehajtása.
+- Saját, Netty nélküli Java NIO UDP listener és bounded sender queue.
+- Direct `ByteBuffer` pool, UDP transport API és wrap-aware 24 bites sequence aritmetika.
+- RakNet frame codec, ACK/NACK range codec, sliding receive window és prioritásos packet queue.
+- Bounded split packet fragmenter/reassembler, MTU policy és 32 ordering/sequencing channel.
+- RTT/RTO estimator, recovery queue, ACK/NACK-alapú retransmission és retry limit.
+- Session- és connection manager periodikus tickkel, keepalive-val, timeouttal és disconnect lifecycle-lal.

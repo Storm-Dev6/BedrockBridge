@@ -1,6 +1,6 @@
 # BedrockBridge
 
-BedrockBridge egy önálló, Java 21-alapú Minecraft Bedrock–Java bridge. A repository jelenleg a **Phase 1 — Foundation** állapotban van: az infrastruktúra elkészült, hálózati vagy packet implementáció még nincs.
+BedrockBridge egy önálló, Java 21-alapú Minecraft Bedrock–Java bridge. A repository jelenleg a **Phase 2 — RakNet Core** állapotban van: az infrastruktúra mellett elkészült az önálló NIO/UDP és RakNet transportmag; Bedrock- és Java-protokoll packetek még nincsenek.
 
 ## Követelmények
 
@@ -39,7 +39,12 @@ A Phase 1 alkalmazás kizárólag a konfigurációt validálja, felépíti az in
 | `api` | stabil extension lifecycle/context API és publikus események |
 | `application` | composition root, bootstrap és application lifecycle |
 | `build-logic` | egységes Java 21, JUnit, Testcontainers, Spotless, Checkstyle és Error Prone policy |
+| `packet-buffer` | bounded direct `ByteBuffer` pool és biztonságos lease lifecycle |
+| `network-core` | UDP transport kontraktusok, datagrammodell és 24 bites sequence aritmetika |
+| `udp-transport` | saját, Netty nélküli Java NIO UDP listener/sender |
+| `network-raknet` | frame codec, ACK/NACK, reliability, retransmission, MTU, fragment és ordering |
+| `session` | session/connection manager, timeout, keepalive, tick és disconnect lifecycle |
 
 ## Projektfázis
 
-Phase 0 és Phase 0.5 elfogadott. Phase 1 nem tartalmaz RakNet, Bedrock vagy Java packet kódot. Phase 2 csak külön utasítás és a Phase 1 review-ja után kezdődhet.
+Phase 0, Phase 0.5 és Phase 1 elfogadott. Phase 2 kizárólag transport-szintű RakNet kódot tartalmaz. Bedrock login, titkosítás, Java protokoll és gameplay fordítás csak későbbi, külön jóváhagyott fázisban kezdődhet.
