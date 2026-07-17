@@ -51,6 +51,8 @@ The first packet catalog contains the following protocol-748 packets:
 |---:|---|---|---|
 | 1 | Login | serverbound | `LOGIN` |
 | 2 | PlayStatus | clientbound | `LOGIN`, `PLAY` |
+| 3 | ServerToClientHandshake | clientbound | `AUTHENTICATING` |
+| 4 | ClientToServerHandshake | serverbound | `AUTHENTICATING` |
 | 5 | Disconnect | clientbound | all connected play states |
 | 6 | ResourcePacksInfo | clientbound | `RESOURCE_PACKS` |
 | 7 | ResourcePackStack | clientbound | `RESOURCE_PACKS` |

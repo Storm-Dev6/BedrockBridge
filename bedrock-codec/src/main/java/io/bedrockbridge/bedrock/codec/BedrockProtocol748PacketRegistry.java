@@ -6,6 +6,7 @@ import io.bedrockbridge.bedrock.BedrockProtocol;
 import io.bedrockbridge.bedrock.BedrockProtocolLimits;
 import io.bedrockbridge.bedrock.BedrockValidationException;
 import io.bedrockbridge.bedrock.packet.play.BedrockExperiment;
+import io.bedrockbridge.bedrock.packet.play.ClientToServerHandshakePacket;
 import io.bedrockbridge.bedrock.packet.play.DisconnectPacket;
 import io.bedrockbridge.bedrock.packet.play.LoginPacket;
 import io.bedrockbridge.bedrock.packet.play.NetworkCompressionAlgorithm;
@@ -19,6 +20,7 @@ import io.bedrockbridge.bedrock.packet.play.ResourcePackResponse;
 import io.bedrockbridge.bedrock.packet.play.ResourcePackStackEntry;
 import io.bedrockbridge.bedrock.packet.play.ResourcePackStackPacket;
 import io.bedrockbridge.bedrock.packet.play.ResourcePacksInfoPacket;
+import io.bedrockbridge.bedrock.packet.play.ServerToClientHandshakePacket;
 import io.bedrockbridge.protocol.PacketDirection;
 import java.util.ArrayList;
 import java.util.EnumSet;
@@ -66,6 +68,20 @@ public final class BedrockProtocol748PacketRegistry {
                 BedrockPlayState.PLAY_READY),
             PlayStatusPacket.class,
             playStatusCodec()));
+    builder.register(
+        registration(
+            BedrockPacketIds.SERVER_TO_CLIENT_HANDSHAKE,
+            PacketDirection.CLIENTBOUND,
+            Set.of(BedrockPlayState.AUTHENTICATING),
+            ServerToClientHandshakePacket.class,
+            serverToClientHandshakeCodec(checkedLimits)));
+    builder.register(
+        registration(
+            BedrockPacketIds.CLIENT_TO_SERVER_HANDSHAKE,
+            PacketDirection.SERVERBOUND,
+            Set.of(BedrockPlayState.AUTHENTICATING),
+            ClientToServerHandshakePacket.class,
+            clientToServerHandshakeCodec()));
     builder.register(
         registration(
             BedrockPacketIds.DISCONNECT,
@@ -191,6 +207,34 @@ public final class BedrockProtocol748PacketRegistry {
         } catch (IllegalArgumentException invalid) {
           throw new BedrockValidationException("Unknown play status");
         }
+      }
+    };
+  }
+
+  private static BedrockPlayPacketCodec<ServerToClientHandshakePacket> serverToClientHandshakeCodec(
+      BedrockProtocolLimits limits) {
+    return new BedrockPlayPacketCodec<>() {
+      @Override
+      public void encode(ServerToClientHandshakePacket packet, BedrockBinaryWriter writer) {
+        writer.writeString(packet.handshakeJwt(), limits.maximumLoginBytes());
+      }
+
+      @Override
+      public ServerToClientHandshakePacket decode(BedrockBinaryReader reader) {
+        return new ServerToClientHandshakePacket(reader.readString(limits.maximumLoginBytes()));
+      }
+    };
+  }
+
+  private static BedrockPlayPacketCodec<ClientToServerHandshakePacket>
+      clientToServerHandshakeCodec() {
+    return new BedrockPlayPacketCodec<>() {
+      @Override
+      public void encode(ClientToServerHandshakePacket packet, BedrockBinaryWriter writer) {}
+
+      @Override
+      public ClientToServerHandshakePacket decode(BedrockBinaryReader reader) {
+        return new ClientToServerHandshakePacket();
       }
     };
   }

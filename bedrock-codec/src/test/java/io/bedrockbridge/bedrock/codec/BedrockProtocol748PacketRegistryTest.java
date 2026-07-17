@@ -10,6 +10,7 @@ import io.bedrockbridge.bedrock.BedrockProtocolLimits;
 import io.bedrockbridge.bedrock.BedrockValidationException;
 import io.bedrockbridge.bedrock.packet.play.BedrockExperiment;
 import io.bedrockbridge.bedrock.packet.play.BedrockPlayPacket;
+import io.bedrockbridge.bedrock.packet.play.ClientToServerHandshakePacket;
 import io.bedrockbridge.bedrock.packet.play.DisconnectPacket;
 import io.bedrockbridge.bedrock.packet.play.LoginPacket;
 import io.bedrockbridge.bedrock.packet.play.NetworkCompressionAlgorithm;
@@ -23,6 +24,7 @@ import io.bedrockbridge.bedrock.packet.play.ResourcePackResponse;
 import io.bedrockbridge.bedrock.packet.play.ResourcePackStackEntry;
 import io.bedrockbridge.bedrock.packet.play.ResourcePackStackPacket;
 import io.bedrockbridge.bedrock.packet.play.ResourcePacksInfoPacket;
+import io.bedrockbridge.bedrock.packet.play.ServerToClientHandshakePacket;
 import io.bedrockbridge.protocol.PacketDirection;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -54,6 +56,11 @@ class BedrockProtocol748PacketRegistryTest {
         bytes(0x02, 0, 0, 0, 0),
         encode(new PlayStatusPacket(PlayStatus.LOGIN_SUCCESS), BedrockPlayState.LOGIN));
     assertArrayEquals(
+        concat(bytes(0x03, 3), "jwt".getBytes(StandardCharsets.UTF_8)),
+        encode(new ServerToClientHandshakePacket("jwt"), BedrockPlayState.AUTHENTICATING));
+    assertArrayEquals(
+        bytes(0x04), encode(new ClientToServerHandshakePacket(), BedrockPlayState.AUTHENTICATING));
+    assertArrayEquals(
         bytes(0x05, 0x52, 0x01), encode(DisconnectPacket.silent(41), BedrockPlayState.LOGIN));
     assertArrayEquals(
         bytes(0x06, 0, 0, 0, 0, 0),
@@ -81,6 +88,10 @@ class BedrockProtocol748PacketRegistryTest {
         new NetworkSettingsPacket(1, NetworkCompressionAlgorithm.NONE, true, 7, 0.25F),
         BedrockPlayState.NETWORK_SETTINGS);
     assertRoundTrip(new LoginPacket(748, bytes(1, 2, 3)), BedrockPlayState.LOGIN);
+    assertRoundTrip(
+        new ServerToClientHandshakePacket("header.payload.signature"),
+        BedrockPlayState.AUTHENTICATING);
+    assertRoundTrip(new ClientToServerHandshakePacket(), BedrockPlayState.AUTHENTICATING);
     assertRoundTrip(new PlayStatusPacket(PlayStatus.PLAYER_SPAWN), BedrockPlayState.PLAY_READY);
     assertRoundTrip(new DisconnectPacket(41, false, "message", "filtered"), BedrockPlayState.LOGIN);
     assertRoundTrip(
