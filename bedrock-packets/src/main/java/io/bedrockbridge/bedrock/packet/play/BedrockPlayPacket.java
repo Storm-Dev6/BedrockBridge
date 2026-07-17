@@ -1,5 +1,6 @@
 package io.bedrockbridge.bedrock.packet.play;
 
+import io.bedrockbridge.bedrock.BedrockProtocol;
 import io.bedrockbridge.protocol.PacketDirection;
 import io.bedrockbridge.protocol.ProtocolVersion;
 
@@ -9,7 +10,9 @@ public interface BedrockPlayPacket {
   int packetId();
 
   /** Returns the exact Bedrock wire version owning this layout. */
-  ProtocolVersion protocolVersion();
+  default ProtocolVersion protocolVersion() {
+    return BedrockProtocol.PLAY_VERSION_748;
+  }
 
   /** Returns the packet direction relative to the bridge server. */
   PacketDirection direction();
