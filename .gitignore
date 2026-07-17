@@ -5,3 +5,12 @@ build/
 .idea/
 *.iml
 out/
+
+# Official Bedrock Dedicated Server distributions and local provenance output.
+# These inputs are user-supplied and must never be committed or fetched by CI.
+bedrock-server-*.zip
+bedrock_server
+bedrock_server.exe
+bedrock_server.pdb
+bedrock_server_how_to.html
+bds-provenance-*.json

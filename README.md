@@ -1,5 +1,7 @@
 # BedrockBridge
 
+> NOT AN OFFICIAL MINECRAFT PRODUCT. NOT APPROVED BY OR ASSOCIATED WITH MOJANG OR MICROSOFT.
+
 BedrockBridge egy önálló, Java 21-alapú Minecraft Bedrock–Java bridge. A repository jelenleg a **Phase 4 — Bedrock Login** állapotban van: a saját NIO/RakNet stack és transport handshake felett elkészült a pinned-root identity chain, client-data hitelesítés, replay protection, ECDH/JWT encryption handshake, authenticated cipher és bounded compression rendszer. Játék még nincs.
 
 ## Követelmények

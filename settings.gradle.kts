@@ -21,6 +21,7 @@ include(
     "bedrock-login",
     "bedrock-auth",
     "bedrock-packets",
+    "bedrock-registry-generator",
     "bedrock-session",
     "common",
     "config",
