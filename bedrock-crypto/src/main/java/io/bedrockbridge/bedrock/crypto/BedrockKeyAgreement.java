@@ -11,28 +11,28 @@ import javax.crypto.KeyAgreement;
 
 /** P-384 ephemeral key generation and ECDH shared-secret derivation. */
 public final class BedrockKeyAgreement {
-    private BedrockKeyAgreement() {}
+  private BedrockKeyAgreement() {}
 
-    /** Generates a fresh P-384 server key pair using the supplied CSPRNG. */
-    public static KeyPair generate(SecureRandom random) {
-        try {
-            KeyPairGenerator generator = KeyPairGenerator.getInstance("EC");
-            generator.initialize(new ECGenParameterSpec("secp384r1"), random);
-            return generator.generateKeyPair();
-        } catch (java.security.GeneralSecurityException failure) {
-            throw new IllegalStateException("P-384 is unavailable", failure);
-        }
+  /** Generates a fresh P-384 server key pair using the supplied CSPRNG. */
+  public static KeyPair generate(SecureRandom random) {
+    try {
+      KeyPairGenerator generator = KeyPairGenerator.getInstance("EC");
+      generator.initialize(new ECGenParameterSpec("secp384r1"), random);
+      return generator.generateKeyPair();
+    } catch (java.security.GeneralSecurityException failure) {
+      throw new IllegalStateException("P-384 is unavailable", failure);
     }
+  }
 
-    /** Derives the raw P-384 ECDH secret. */
-    public static byte[] derive(PrivateKey privateKey, PublicKey peerKey) {
-        try {
-            KeyAgreement agreement = KeyAgreement.getInstance("ECDH");
-            agreement.init(privateKey);
-            agreement.doPhase(peerKey, true);
-            return agreement.generateSecret();
-        } catch (java.security.GeneralSecurityException failure) {
-            throw new BedrockValidationException("Unable to derive Bedrock session secret");
-        }
+  /** Derives the raw P-384 ECDH secret. */
+  public static byte[] derive(PrivateKey privateKey, PublicKey peerKey) {
+    try {
+      KeyAgreement agreement = KeyAgreement.getInstance("ECDH");
+      agreement.init(privateKey);
+      agreement.doPhase(peerKey, true);
+      return agreement.generateSecret();
+    } catch (java.security.GeneralSecurityException failure) {
+      throw new BedrockValidationException("Unable to derive Bedrock session secret");
     }
+  }
 }

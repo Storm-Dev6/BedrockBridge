@@ -7,11 +7,14 @@ import io.bedrockbridge.protocol.PacketWriter;
 
 /** Connected peer notification that the transport should close immediately. */
 public final class DisconnectNotification extends AbstractBedrockHandshakePacket {
-    /** Creates a serverbound disconnect notification. */
-    public DisconnectNotification() {
-        super(BedrockPacketIds.DISCONNECT_NOTIFICATION, PacketDirection.SERVERBOUND);
-    }
+  /** Creates a serverbound disconnect notification. */
+  public DisconnectNotification() {
+    super(BedrockPacketIds.DISCONNECT_NOTIFICATION, PacketDirection.SERVERBOUND);
+  }
 
-    @Override public void encode(PacketWriter writer) {}
-    @Override public void decode(PacketReader reader) {}
+  @Override
+  public void encode(PacketWriter writer) {}
+
+  @Override
+  public void decode(PacketReader reader) {}
 }

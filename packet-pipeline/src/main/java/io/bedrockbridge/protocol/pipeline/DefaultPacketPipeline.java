@@ -7,24 +7,24 @@ import java.util.Optional;
 
 /** Immutable, thread-safe packet pipeline. */
 public class DefaultPacketPipeline implements PacketPipeline {
-    private final List<PipelineStage> stages;
+  private final List<PipelineStage> stages;
 
-    /** Freezes stages in invocation order. */
-    public DefaultPacketPipeline(List<PipelineStage> stages) {
-        this.stages = List.copyOf(stages);
-    }
+  /** Freezes stages in invocation order. */
+  public DefaultPacketPipeline(List<PipelineStage> stages) {
+    this.stages = List.copyOf(stages);
+  }
 
-    @Override
-    public Optional<Packet> process(Packet packet, PipelineContext context) {
-        Packet current = Objects.requireNonNull(packet, "packet");
-        Objects.requireNonNull(context, "context");
-        for (PipelineStage stage : stages) {
-            Optional<Packet> next = stage.process(current, context);
-            if (next.isEmpty()) {
-                return Optional.empty();
-            }
-            current = next.orElseThrow();
-        }
-        return Optional.of(current);
+  @Override
+  public Optional<Packet> process(Packet packet, PipelineContext context) {
+    Packet current = Objects.requireNonNull(packet, "packet");
+    Objects.requireNonNull(context, "context");
+    for (PipelineStage stage : stages) {
+      Optional<Packet> next = stage.process(current, context);
+      if (next.isEmpty()) {
+        return Optional.empty();
+      }
+      current = next.orElseThrow();
     }
+    return Optional.of(current);
+  }
 }
