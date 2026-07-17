@@ -13,10 +13,12 @@ archive was hashed independently before any extraction:
   `https://www.minecraft.net/bedrockdedicatedserver/bin-win/bedrock-server-1.21.40.03.zip`;
 - archive length: `37,129,683` bytes;
 - archive SHA-256: `524d062b914b13740b7323486fd49dd0ca7fc87916318b6e0c1deb841379d99a`;
-- manifest inspection instant: `2026-07-17T19:35:27.662685600Z`.
+- archive inspection: `System.IO.Compression.ZipArchive.OpenRead` streamed all 8,036 entries
+  (596 directories and 7,440 regular files; 123,095,622 uncompressed bytes) without an error;
+- manifest inspection instant: `2026-07-17T20:20:04.700586300Z` UTC.
 
-The production provenance manifest contains 7,440 per-file digests, is 1,292,843 bytes, and has
-SHA-256 `80e9ec9df8b5b9ec0602f81bb9be0758c61e7da8e9457fdf8510ae9fe60c7a5d`.
+The locally generated provenance manifest contains 7,440 per-file digests, is 1,292,843 bytes,
+and has SHA-256 `0ab6b14ca5727884e69de48189266b10aab056d5b15063857aabddd6beed919b`.
 It remains outside the repository together with the BDS archive. No registry had been extracted at
 the time of this provenance checkpoint.
 
@@ -53,9 +55,13 @@ gradlew.bat :bedrock-registry-generator:run --args="--input D:\legal-input\bedro
 ## Proposed extraction method
 
 The preferred observation boundary is the documented Bedrock protocol emitted by an unmodified,
-locally executed BDS process. A later extractor may observe only the protocol-748 StartGame item
-registry on loopback and normalize its three documented fields: identifier string, signed 16-bit
-runtime ID, and component-based flag. It must not inspect process memory, inject code, patch or
+locally executed BDS process. A later extractor may observe only the protocol-748 StartGame packet
+(packet ID 11) on loopback and normalize its item-list entries using the three fields documented
+by the authoritative `r/21_u4` publication: item name string, signed 16-bit item ID, and
+component-based boolean
+([Mojang protocol-748 ItemData definition](https://github.com/Mojang/bedrock-protocol-docs/blob/8dbf811fd0927c505a916e3d1c7d0ff830c0630c/html/ItemData.html)).
+The newer protocol branches add fields that are not part of 748 and must not be guessed or copied
+back into this generator. The extractor must not inspect process memory, inject code, patch or
 modify executables, bypass access controls, disable signature checks, or parse unrelated game
 content.
 

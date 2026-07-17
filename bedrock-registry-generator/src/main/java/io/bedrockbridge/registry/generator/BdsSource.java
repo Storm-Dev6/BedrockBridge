@@ -6,9 +6,8 @@ import java.util.Objects;
 import java.util.Set;
 
 public record BdsSource(String version, URI downloadUri) {
-  private static final Set<String> ALLOWED_EXACT_HOSTS = Set.of("aka.ms", "minecraft.net");
-  private static final Set<String> ALLOWED_HOST_SUFFIXES =
-      Set.of(".minecraft.net", ".mojang.com", ".microsoft.com");
+  private static final Set<String> ALLOWED_EXACT_HOSTS =
+      Set.of("minecraft.net", "www.minecraft.net", "aka.ms");
 
   public BdsSource {
     Objects.requireNonNull(version, "version");
@@ -21,13 +20,16 @@ public record BdsSource(String version, URI downloadUri) {
     }
     String host =
         Objects.requireNonNull(downloadUri.getHost(), "download URI host").toLowerCase(Locale.ROOT);
-    boolean allowed = ALLOWED_EXACT_HOSTS.contains(host);
-    for (String suffix : ALLOWED_HOST_SUFFIXES) {
-      allowed |= host.endsWith(suffix);
-    }
-    if (!allowed) {
+    if (!ALLOWED_EXACT_HOSTS.contains(host)) {
       throw new IllegalArgumentException(
           "The distribution source must be an official Microsoft, Mojang, or Minecraft host");
+    }
+    String path = downloadUri.getPath().toLowerCase(Locale.ROOT);
+    String normalizedVersion = version.replace('.', '_');
+    if (!path.contains("bedrock-server-" + version.toLowerCase(Locale.ROOT) + ".zip")
+        && !path.contains("bedrock-server-" + normalizedVersion + ".zip")) {
+      throw new IllegalArgumentException(
+          "The source path does not identify the requested BDS version");
     }
   }
 }

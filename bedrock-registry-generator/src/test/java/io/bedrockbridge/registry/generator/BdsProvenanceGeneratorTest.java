@@ -22,7 +22,9 @@ class BdsProvenanceGeneratorTest {
   private static final Instant INSPECTED_AT = Instant.parse("2026-07-17T19:30:00Z");
   private static final BdsSource SOURCE =
       new BdsSource(
-          "1.21.40.03", URI.create("https://www.minecraft.net/bedrockdedicatedserver/test.zip"));
+          "1.21.40.03",
+          URI.create(
+              "https://www.minecraft.net/bedrockdedicatedserver/bin-win/bedrock-server-1.21.40.03.zip"));
 
   @TempDir Path temporaryDirectory;
 
@@ -75,10 +77,16 @@ class BdsProvenanceGeneratorTest {
         IOException.class, () -> new BdsDistributionHasher().hash(archive, SOURCE, INSPECTED_AT));
     assertThrows(
         IllegalArgumentException.class,
-        () -> new BdsSource("1.21.40", URI.create("https://example.invalid/bds.zip")));
+        () ->
+            new BdsSource(
+                "1.21.40.03", URI.create("https://example.invalid/bedrock-server-1.21.40.03.zip")));
     assertThrows(
         IllegalArgumentException.class,
-        () -> new BdsSource("1.21.41", URI.create("https://www.minecraft.net/bedrock-server.zip")));
+        () ->
+            new BdsSource(
+                "1.21.41",
+                URI.create(
+                    "https://www.minecraft.net/bedrockdedicatedserver/bin-win/bedrock-server-1.21.41.zip")));
   }
 
   @Test
