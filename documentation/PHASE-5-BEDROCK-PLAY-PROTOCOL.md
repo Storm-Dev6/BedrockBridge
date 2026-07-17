@@ -147,6 +147,11 @@ methods. Fields explicitly documented as big-endian (network versions and play s
 routed through little-endian helpers. Signed Bedrock varints use ZigZag coding; unsigned variants
 reject overflow and non-canonical encodings.
 
+The Login connection request is decoded as two signed little-endian 32-bit byte lengths followed by
+the chain JSON and client-data JWT UTF-8 bytes. The decoder uses an isolated buffer view, validates
+both lengths before slicing, reports malformed UTF-8, rejects trailing data, and hands the decoded
+strings to the existing strict JSON/JWT authentication boundary.
+
 Compression is immutable after a successful NetworkSettings exchange. Protocol 748 initially
 supports zlib and explicit no-compression; Snappy is rejected until an audited implementation and
 vectors are added. Decompression must finish a single stream, consume all compressed input, and
