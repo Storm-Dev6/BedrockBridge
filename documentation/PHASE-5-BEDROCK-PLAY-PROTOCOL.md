@@ -123,6 +123,13 @@ wrong-state packets produce a structured violation and deterministic disconnect.
 terminal. Session teardown clears authentication material, pending pack data, decompression state,
 and queued outbound buffers.
 
+`BedrockPlayStateMachine` validates the complete inbound control sequence independently of outbound
+packet construction. It distinguishes the resource-pack download and stack acknowledgements while
+remaining in `RESOURCE_PACKS`, rejects reordered completion, and
+reaches `PLAY_READY` only after the caller confirms that StartGame was encoded and queued. Outbound
+login-status ordering is intentionally owned by the later orchestrator and is not inferred from
+packet IDs.
+
 ## Wire model
 
 Every game packet begins with Mojang's unsigned-varint header. Bits 0-9 contain the packet ID, bits
