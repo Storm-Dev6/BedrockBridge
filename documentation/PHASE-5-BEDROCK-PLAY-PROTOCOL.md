@@ -2,9 +2,10 @@
 
 ## Status
 
-Implementation in progress on `agent/phase-5-bedrock-play-protocol`. Phase A is present on `main`,
-and the Java 21 baseline command `gradlew.bat --no-daemon clean check assemble` passes before any
-Phase 5 change.
+Implementation is in progress on `agent/phase-5-bedrock-play-protocol`. P5.1 framing/registry and
+P5.2 network-settings/login/resource-pack control packets are implemented and validated. The Java
+21 gate `gradlew.bat --no-daemon clean check assemble` is green. P5.3 is intentionally paused at
+the StartGame item-list boundary until a locally generated registry is explicitly approved.
 
 ## Supported protocol
 
@@ -236,3 +237,12 @@ Phase 5 establishes a production-quality Bedrock play-ready vertical slice, not 
 translation. Chunk, entity, inventory, movement, chat, command, UI, and Java-edition translation
 packets belong to later phases. Snappy compression and additional Bedrock 1.21.x protocol numbers
 are also explicit future deltas, not silently accepted aliases of protocol 748.
+
+## Current approval boundary
+
+The current branch does not contain a StartGame packet implementation or a vanilla item registry.
+The protocol-748 StartGame item list requires every vanilla item; an empty or guessed list would not
+be interoperable. The external provenance manifest and BDS runtime verification are complete, but
+the registry artifact remains local and uncommitted. Before implementing or staging that artifact,
+the exact fields, source observation, necessity, redistribution risk, and local-artifact loading
+path must be reviewed and approved separately.
