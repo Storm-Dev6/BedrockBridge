@@ -31,69 +31,89 @@ import org.openjdk.jmh.annotations.State;
 @OutputTimeUnit(TimeUnit.SECONDS)
 @State(Scope.Thread)
 public class ProtocolFrameworkBenchmark {
-    private static final ProtocolVersion VERSION = new ProtocolVersion("benchmark", "1", 1);
-    private final DynamicPacketRegistry registry = new DynamicPacketRegistry();
-    private final BenchmarkPacket packet = new BenchmarkPacket();
-    private final ByteBuffer encoded = ByteBuffer.allocate(16);
-    private final InboundPipeline pipeline = new InboundPipeline(
-            List.of((value, context) -> Optional.of(value)));
-    private final PipelineContext context =
-            new PipelineContext(VERSION, ProtocolState.PLAY, PacketDirection.SERVERBOUND);
-    private PacketProcessor processor;
+  private static final ProtocolVersion VERSION = new ProtocolVersion("benchmark", "1", 1);
+  private final DynamicPacketRegistry registry = new DynamicPacketRegistry();
+  private final BenchmarkPacket packet = new BenchmarkPacket();
+  private final ByteBuffer encoded = ByteBuffer.allocate(16);
+  private final InboundPipeline pipeline =
+      new InboundPipeline(List.of((value, context) -> Optional.of(value)));
+  private final PipelineContext context =
+      new PipelineContext(VERSION, ProtocolState.PLAY, PacketDirection.SERVERBOUND);
+  private PacketProcessor processor;
 
-    /** Initializes the registry and canonical encoded fixture before measurements. */
-    @Setup(Level.Trial)
-    public void setup() {
-        registry.register(new PacketRegistration<>(
-                new PacketKey(VERSION, ProtocolState.PLAY, PacketDirection.SERVERBOUND, 1),
-                BenchmarkPacket.class,
-                new DefaultPacketCodec<>(),
-                BenchmarkPacket::new));
-        processor = new PacketProcessor(registry);
-        processor.encode(packet, encoded);
-        encoded.flip();
+  /** Initializes the registry and canonical encoded fixture before measurements. */
+  @Setup(Level.Trial)
+  public void setup() {
+    registry.register(
+        new PacketRegistration<>(
+            new PacketKey(VERSION, ProtocolState.PLAY, PacketDirection.SERVERBOUND, 1),
+            BenchmarkPacket.class,
+            new DefaultPacketCodec<>(),
+            BenchmarkPacket::new));
+    processor = new PacketProcessor(registry);
+    processor.encode(packet, encoded);
+    encoded.flip();
+  }
+
+  /** Measures packet field encoding operations per second. */
+  @Benchmark
+  public int encode() {
+    ByteBuffer output = ByteBuffer.allocate(16);
+    return processor.encode(packet, output);
+  }
+
+  /** Measures packet factory and decoding operations per second. */
+  @Benchmark
+  public Packet decode() {
+    return processor.decode(
+        VERSION, ProtocolState.PLAY, PacketDirection.SERVERBOUND, 1, encoded.duplicate());
+  }
+
+  /** Measures complete-key registry lookups per second. */
+  @Benchmark
+  public Object registryLookup() {
+    return registry.find(
+        new PacketKey(VERSION, ProtocolState.PLAY, PacketDirection.SERVERBOUND, 1));
+  }
+
+  /** Measures a single-stage packet pipeline throughput. */
+  @Benchmark
+  public Object pipelineThroughput() {
+    return pipeline.process(packet, context);
+  }
+
+  /** Minimal edition-neutral benchmark fixture packet. */
+  public static final class BenchmarkPacket implements Packet {
+    private int value = 42;
+
+    @Override
+    public int packetId() {
+      return 1;
     }
 
-    /** Measures packet field encoding operations per second. */
-    @Benchmark
-    public int encode() {
-        ByteBuffer output = ByteBuffer.allocate(16);
-        return processor.encode(packet, output);
+    @Override
+    public ProtocolVersion protocolVersion() {
+      return VERSION;
     }
 
-    /** Measures packet factory and decoding operations per second. */
-    @Benchmark
-    public Packet decode() {
-        return processor.decode(
-                VERSION,
-                ProtocolState.PLAY,
-                PacketDirection.SERVERBOUND,
-                1,
-                encoded.duplicate());
+    @Override
+    public ProtocolState state() {
+      return ProtocolState.PLAY;
     }
 
-    /** Measures complete-key registry lookups per second. */
-    @Benchmark
-    public Object registryLookup() {
-        return registry.find(
-                new PacketKey(VERSION, ProtocolState.PLAY, PacketDirection.SERVERBOUND, 1));
+    @Override
+    public PacketDirection direction() {
+      return PacketDirection.SERVERBOUND;
     }
 
-    /** Measures a single-stage packet pipeline throughput. */
-    @Benchmark
-    public Object pipelineThroughput() {
-        return pipeline.process(packet, context);
+    @Override
+    public void encode(PacketWriter writer) {
+      writer.writeInt(value);
     }
 
-    /** Minimal edition-neutral benchmark fixture packet. */
-    public static final class BenchmarkPacket implements Packet {
-        private int value = 42;
-
-        @Override public int packetId() { return 1; }
-        @Override public ProtocolVersion protocolVersion() { return VERSION; }
-        @Override public ProtocolState state() { return ProtocolState.PLAY; }
-        @Override public PacketDirection direction() { return PacketDirection.SERVERBOUND; }
-        @Override public void encode(PacketWriter writer) { writer.writeInt(value); }
-        @Override public void decode(PacketReader reader) { value = reader.readInt(); }
+    @Override
+    public void decode(PacketReader reader) {
+      value = reader.readInt();
     }
+  }
 }

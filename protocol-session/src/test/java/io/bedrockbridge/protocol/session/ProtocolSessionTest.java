@@ -9,13 +9,13 @@ import io.bedrockbridge.protocol.registry.StateRegistry;
 import org.junit.jupiter.api.Test;
 
 class ProtocolSessionTest {
-    @Test
-    void stateMachineAllowsOnlyRegisteredTransition() {
-        StateRegistry registry = new StateRegistry();
-        registry.allow(ProtocolState.HANDSHAKE, ProtocolState.LOGIN);
-        var machine = new ProtocolStateMachine(registry, ProtocolState.HANDSHAKE);
-        machine.transition(ProtocolState.LOGIN);
-        assertEquals(ProtocolState.LOGIN, machine.state());
-        assertThrows(LifecycleException.class, () -> machine.transition(ProtocolState.PLAY));
-    }
+  @Test
+  void stateMachineAllowsOnlyRegisteredTransition() {
+    StateRegistry registry = new StateRegistry();
+    registry.allow(ProtocolState.HANDSHAKE, ProtocolState.LOGIN);
+    var machine = new ProtocolStateMachine(registry, ProtocolState.HANDSHAKE);
+    machine.transition(ProtocolState.LOGIN);
+    assertEquals(ProtocolState.LOGIN, machine.state());
+    assertThrows(LifecycleException.class, () -> machine.transition(ProtocolState.PLAY));
+  }
 }

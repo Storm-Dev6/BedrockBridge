@@ -8,12 +8,12 @@ import java.util.Objects;
 
 /** Typed packet ID to codec and factory registration. */
 public record PacketRegistration<T extends Packet>(
-        PacketKey key, Class<T> packetType, PacketCodec<T> codec, PacketFactory<T> factory) {
-    /** Validates every registration component. */
-    public PacketRegistration {
-        Objects.requireNonNull(key, "key");
-        Objects.requireNonNull(packetType, "packetType");
-        Objects.requireNonNull(codec, "codec");
-        Objects.requireNonNull(factory, "factory");
-    }
+    PacketKey key, Class<T> packetType, PacketCodec<T> codec, PacketFactory<T> factory) {
+  /** Validates every registration component. */
+  public PacketRegistration {
+    Objects.requireNonNull(key, "key");
+    Objects.requireNonNull(packetType, "packetType");
+    Objects.requireNonNull(codec, "codec");
+    Objects.requireNonNull(factory, "factory");
+  }
 }
