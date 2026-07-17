@@ -6,6 +6,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -22,7 +23,7 @@ public final class BdsProvenanceCli {
     BdsSource source =
         new BdsSource(
             required(options, "--version"), URI.create(required(options, "--source-url")));
-    BdsProvenanceManifest manifest = new BdsDistributionHasher().hash(input, source);
+    BdsProvenanceManifest manifest = new BdsDistributionHasher().hash(input, source, Instant.now());
     Path parent = output.toAbsolutePath().normalize().getParent();
     if (parent != null) {
       Files.createDirectories(parent);

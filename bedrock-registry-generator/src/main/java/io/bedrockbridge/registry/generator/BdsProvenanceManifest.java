@@ -1,17 +1,23 @@
 package io.bedrockbridge.registry.generator;
 
+import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
 
 public record BdsProvenanceManifest(
-    BdsSource source, String distributionSha256, long distributionSize, List<FileDigest> files) {
+    BdsSource source,
+    Instant inspectedAt,
+    String distributionSha256,
+    long distributionSize,
+    List<FileDigest> files) {
   public static final String SCHEMA = "io.bedrockbridge.bds-provenance/v1";
   public static final String DISCLAIMER =
       "NOT AN OFFICIAL MINECRAFT PRODUCT. NOT APPROVED BY OR ASSOCIATED WITH MOJANG OR MICROSOFT.";
 
   public BdsProvenanceManifest {
     Objects.requireNonNull(source, "source");
+    Objects.requireNonNull(inspectedAt, "inspectedAt");
     Objects.requireNonNull(distributionSha256, "distributionSha256");
     files =
         List.copyOf(Objects.requireNonNull(files, "files")).stream()

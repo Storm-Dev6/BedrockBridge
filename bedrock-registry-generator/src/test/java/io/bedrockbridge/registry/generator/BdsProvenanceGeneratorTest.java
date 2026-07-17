@@ -11,6 +11,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.time.Instant;
 import java.util.HexFormat;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
@@ -18,6 +19,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 class BdsProvenanceGeneratorTest {
+  private static final Instant INSPECTED_AT = Instant.parse("2026-07-17T19:30:00Z");
   private static final BdsSource SOURCE =
       new BdsSource(
           "1.21.40.03", URI.create("https://www.minecraft.net/bedrockdedicatedserver/test.zip"));
@@ -31,14 +33,15 @@ class BdsProvenanceGeneratorTest {
     Path data = Files.createDirectory(root.resolve("data"));
     Files.write(data.resolve("registry.bin"), new byte[] {0, 1, 2, 3});
 
-    BdsProvenanceManifest first = new BdsDistributionHasher().hash(root, SOURCE);
-    BdsProvenanceManifest second = new BdsDistributionHasher().hash(root, SOURCE);
+    BdsProvenanceManifest first = new BdsDistributionHasher().hash(root, SOURCE, INSPECTED_AT);
+    BdsProvenanceManifest second = new BdsDistributionHasher().hash(root, SOURCE, INSPECTED_AT);
 
     assertEquals(first, second);
     assertEquals(2, first.files().size());
     assertEquals("data/registry.bin", first.files().get(0).path());
     assertEquals(20, first.distributionSize());
     assertTrue(ProvenanceJson.write(first).contains(BdsProvenanceManifest.DISCLAIMER));
+    assertTrue(ProvenanceJson.write(first).contains("\"inspectedAt\": \"2026-07-17T19:30:00Z\""));
   }
 
   @Test
@@ -50,7 +53,8 @@ class BdsProvenanceGeneratorTest {
       zip.closeEntry();
     }
 
-    BdsProvenanceManifest manifest = new BdsDistributionHasher().hash(archive, SOURCE);
+    BdsProvenanceManifest manifest =
+        new BdsDistributionHasher().hash(archive, SOURCE, INSPECTED_AT);
 
     assertEquals(1, manifest.files().size());
     assertEquals("data/items.bin", manifest.files().get(0).path());
@@ -67,7 +71,8 @@ class BdsProvenanceGeneratorTest {
       zip.closeEntry();
     }
 
-    assertThrows(IOException.class, () -> new BdsDistributionHasher().hash(archive, SOURCE));
+    assertThrows(
+        IOException.class, () -> new BdsDistributionHasher().hash(archive, SOURCE, INSPECTED_AT));
     assertThrows(
         IllegalArgumentException.class,
         () -> new BdsSource("1.21.40", URI.create("https://example.invalid/bds.zip")));

@@ -2,18 +2,27 @@
 
 > NOT AN OFFICIAL MINECRAFT PRODUCT. NOT APPROVED BY OR ASSOCIATED WITH MOJANG OR MICROSOFT.
 
-## Current evidence state
+## Verified distribution
 
-No Bedrock Dedicated Server distribution was downloaded, opened, executed, or used to produce a
-registry during this work package. Consequently there is no production BDS file hash or extracted
-registry to record yet. The official download page currently exposes only the live and preview
-channels and does not identify an archived 1.21.40 package. A community archive is not an acceptable
-substitute.
+The user supplied an unchanged official Windows BDS archive outside every Git work tree. On
+2026-07-17 it was opened read-only as a ZIP, its expected server executable was confirmed, and the
+archive was hashed independently before any extraction:
 
-The repository contains only the independently authored provenance generator and synthetic test
-fixtures. Neither CI nor Gradle downloads BDS. A real manifest must be generated outside every Git
-work tree from a user-supplied package whose exact official download URL was retained at acquisition
-time.
+- version: `1.21.40.03`;
+- official acquisition URL:
+  `https://www.minecraft.net/bedrockdedicatedserver/bin-win/bedrock-server-1.21.40.03.zip`;
+- archive length: `37,129,683` bytes;
+- archive SHA-256: `524d062b914b13740b7323486fd49dd0ca7fc87916318b6e0c1deb841379d99a`;
+- manifest inspection instant: `2026-07-17T19:35:27.662685600Z`.
+
+The production provenance manifest contains 7,440 per-file digests, is 1,292,843 bytes, and has
+SHA-256 `80e9ec9df8b5b9ec0602f81bb9be0758c61e7da8e9457fdf8510ae9fe60c7a5d`.
+It remains outside the repository together with the BDS archive. No registry had been extracted at
+the time of this provenance checkpoint.
+
+The repository contains only the independently authored provenance generator, the public archive
+identity above, and synthetic test fixtures. Neither CI nor Gradle downloads BDS, and a community
+archive is not an acceptable substitute.
 
 ## Allowed input and provenance record
 
@@ -23,6 +32,7 @@ the `1.21.40` release line and records:
 
 - the asserted full BDS version;
 - the exact official acquisition URL;
+- the UTC instant at which the distribution was inspected;
 - the SHA-256 and byte length of the original ZIP, or a deterministic aggregate digest for a
   directory;
 - the normalized relative path, byte length, and SHA-256 of each distribution file;

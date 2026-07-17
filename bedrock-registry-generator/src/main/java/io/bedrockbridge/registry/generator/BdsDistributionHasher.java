@@ -8,6 +8,7 @@ import java.nio.file.Path;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HexFormat;
@@ -20,19 +21,20 @@ public final class BdsDistributionHasher {
   private static final int MAX_FILES = 100_000;
   private static final long MAX_TOTAL_BYTES = 8L * 1024 * 1024 * 1024;
 
-  public BdsProvenanceManifest hash(Path input, BdsSource source) throws IOException {
+  public BdsProvenanceManifest hash(Path input, BdsSource source, Instant inspectedAt)
+      throws IOException {
     Path normalized = input.toAbsolutePath().normalize();
     if (Files.isDirectory(normalized)) {
-      return hashDirectory(normalized, source);
+      return hashDirectory(normalized, source, inspectedAt);
     }
     if (!Files.isRegularFile(normalized)) {
       throw new IOException("BDS input is neither a regular ZIP file nor a directory");
     }
-    return hashZip(normalized, source);
+    return hashZip(normalized, source, inspectedAt);
   }
 
-  private static BdsProvenanceManifest hashDirectory(Path root, BdsSource source)
-      throws IOException {
+  private static BdsProvenanceManifest hashDirectory(
+      Path root, BdsSource source, Instant inspectedAt) throws IOException {
     List<Path> paths;
     try (var stream = Files.walk(root)) {
       paths = stream.filter(path -> !path.equals(root)).sorted().toList();
@@ -59,10 +61,15 @@ public final class BdsDistributionHasher {
       requireFileCount(files.size());
     }
     return new BdsProvenanceManifest(
-        source, HexFormat.of().formatHex(distributionDigest.digest()), totalSize, files);
+        source,
+        inspectedAt,
+        HexFormat.of().formatHex(distributionDigest.digest()),
+        totalSize,
+        files);
   }
 
-  private static BdsProvenanceManifest hashZip(Path archive, BdsSource source) throws IOException {
+  private static BdsProvenanceManifest hashZip(Path archive, BdsSource source, Instant inspectedAt)
+      throws IOException {
     List<FileDigest> files = new ArrayList<>();
     long totalSize = 0;
     try (InputStream fileInput = new BufferedInputStream(Files.newInputStream(archive));
@@ -85,7 +92,11 @@ public final class BdsDistributionHasher {
       copyToDigest(input, archiveDigest, MAX_TOTAL_BYTES);
     }
     return new BdsProvenanceManifest(
-        source, HexFormat.of().formatHex(archiveDigest.digest()), Files.size(archive), files);
+        source,
+        inspectedAt,
+        HexFormat.of().formatHex(archiveDigest.digest()),
+        Files.size(archive),
+        files);
   }
 
   private static FileDigest hashFile(Path file, String relative, long size) throws IOException {

@@ -11,6 +11,7 @@ public final class ProvenanceJson {
     field(json, "product", "Minecraft Bedrock Dedicated Server", true);
     field(json, "version", manifest.source().version(), true);
     field(json, "sourceUrl", manifest.source().downloadUri().toASCIIString(), true);
+    field(json, "inspectedAt", manifest.inspectedAt().toString(), true);
     field(json, "distributionSha256", manifest.distributionSha256(), true);
     json.append("  \"distributionSize\": ").append(manifest.distributionSize()).append(",\n");
     json.append("  \"files\": [\n");
