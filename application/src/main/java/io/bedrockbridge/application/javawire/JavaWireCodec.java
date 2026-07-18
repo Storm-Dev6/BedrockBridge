@@ -1,0 +1,323 @@
+package io.bedrockbridge.application.javawire;
+
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.EOFException;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
+import java.util.zip.DataFormatException;
+import java.util.zip.Deflater;
+import java.util.zip.Inflater;
+
+/** Clean-room Java packet framing and the packet subset used by the bridge. */
+public final class JavaWireCodec {
+  public static final int PROTOCOL_1_21_1 = 767;
+  private static final int MAX_PACKET_BYTES = 2 * 1024 * 1024;
+  private static final int MAX_STRING_BYTES = 1_048_576;
+
+  private JavaWireCodec() {}
+
+  public static void writePacket(
+      OutputStream output, int packetId, byte[] fields, int compressionThreshold)
+      throws IOException {
+    ByteArrayOutputStream body = new ByteArrayOutputStream();
+    writeVarInt(body, packetId);
+    body.write(fields);
+    byte[] raw = body.toByteArray();
+    ByteArrayOutputStream framed = new ByteArrayOutputStream();
+    if (compressionThreshold >= 0) {
+      if (raw.length >= compressionThreshold) {
+        byte[] compressed = compress(raw);
+        writeVarInt(framed, raw.length);
+        framed.write(compressed);
+      } else {
+        writeVarInt(framed, 0);
+        framed.write(raw);
+      }
+    } else {
+      framed.write(raw);
+    }
+    byte[] frame = framed.toByteArray();
+    writeVarInt(output, frame.length);
+    output.write(frame);
+    output.flush();
+  }
+
+  public static Frame readFrame(InputStream input, int compressionThreshold)
+      throws IOException, JavaWireException {
+    int length = readVarInt(input);
+    if (length < 1 || length > MAX_PACKET_BYTES) {
+      throw new JavaWireException("invalid Java packet length: " + length);
+    }
+    byte[] frame = input.readNBytes(length);
+    if (frame.length != length) {
+      throw new EOFException("truncated Java packet frame");
+    }
+    byte[] body = frame;
+    if (compressionThreshold >= 0) {
+      ByteArrayInputStream compressedFrame = new ByteArrayInputStream(frame);
+      int uncompressedLength = readVarInt(compressedFrame);
+      byte[] compressed = compressedFrame.readAllBytes();
+      if (uncompressedLength != 0) {
+        if (uncompressedLength > MAX_PACKET_BYTES) {
+          throw new JavaWireException("invalid uncompressed Java packet length");
+        }
+        body = decompress(compressed, uncompressedLength);
+      } else {
+        body = compressed;
+      }
+    }
+    ByteArrayInputStream bodyInput = new ByteArrayInputStream(body);
+    int packetId = readVarInt(bodyInput);
+    return new Frame(packetId, bodyInput.readAllBytes());
+  }
+
+  public static byte[] encode(JavaWirePacket packet, JavaWireState state) throws JavaWireException {
+    try {
+      ByteArrayOutputStream out = new ByteArrayOutputStream();
+      if (packet instanceof JavaWirePacket.Handshake p) {
+        writeVarInt(out, p.protocolVersion());
+        writeString(out, p.host(), 255);
+        writeUnsignedShort(out, p.port());
+        writeVarInt(out, p.nextState());
+      } else if (packet instanceof JavaWirePacket.StatusRequest) {
+        // no fields
+      } else if (packet instanceof JavaWirePacket.Ping p) {
+        writeLong(out, p.payload());
+      } else if (packet instanceof JavaWirePacket.LoginStart p) {
+        writeString(out, p.username(), 16);
+        writeUuid(out, p.uuid());
+      } else if (packet instanceof JavaWirePacket.LoginAcknowledged) {
+        // no fields
+      } else if (packet instanceof JavaWirePacket.AcknowledgeFinishConfiguration) {
+        // no fields
+      } else if (packet instanceof JavaWirePacket.Pong p) {
+        writeLong(out, p.payload());
+      } else if (packet instanceof JavaWirePacket.KeepAlive p) {
+        writeLong(out, p.payload());
+      } else if (packet instanceof JavaWirePacket.KnownPacks p) {
+        writeVarInt(out, p.packs().size());
+        for (JavaWirePacket.KnownPack pack : p.packs()) {
+          writeString(out, pack.namespace(), 32767);
+          writeString(out, pack.id(), 32767);
+          writeString(out, pack.version(), 32767);
+        }
+      } else {
+        throw new JavaWireException("packet is not valid serverbound in " + state + ": " + packet);
+      }
+      return out.toByteArray();
+    } catch (IOException e) {
+      throw new JavaWireException("failed to encode Java packet", e);
+    }
+  }
+
+  public static JavaWirePacket decode(JavaWireState state, int packetId, byte[] fields)
+      throws JavaWireException {
+    try {
+      DataInputStream in = new DataInputStream(new ByteArrayInputStream(fields));
+      return switch (state) {
+        case LOGIN -> decodeLogin(packetId, in);
+        case STATUS -> decodeStatus(packetId, in);
+        case CONFIGURATION -> decodeConfiguration(packetId, in);
+        case HANDSHAKING, PLAY, CLOSED ->
+            throw new JavaWireException(
+                "unsupported inbound packet state=" + state + " id=" + packetId);
+      };
+    } catch (IOException e) {
+      throw new JavaWireException("malformed Java packet state=" + state + " id=" + packetId, e);
+    }
+  }
+
+  private static JavaWirePacket decodeLogin(int id, DataInputStream in)
+      throws IOException, JavaWireException {
+    return switch (id) {
+      case 0x00 -> new JavaWirePacket.Disconnect(readString(in, 262144));
+      case 0x02 -> {
+        UUID uuid = readUuid(in);
+        String username = readString(in, 16);
+        int properties = readVarInt(in);
+        if (properties < 0 || properties > 1024) {
+          throw new JavaWireException("invalid property count");
+        }
+        for (int i = 0; i < properties; i++) {
+          readString(in, 32767);
+          readString(in, 32767);
+          if (in.readBoolean()) {
+            readString(in, 32767);
+          }
+        }
+        yield new JavaWirePacket.LoginSuccess(uuid, username, in.readBoolean());
+      }
+      case 0x03 -> new JavaWirePacket.SetCompression(readVarInt(in));
+      default -> throw new JavaWireException("unsupported login packet id=" + id);
+    };
+  }
+
+  private static JavaWirePacket decodeStatus(int id, DataInputStream in)
+      throws IOException, JavaWireException {
+    return switch (id) {
+      case 0x00 -> new JavaWirePacket.StatusResponse(readString(in, 262144));
+      case 0x01 -> new JavaWirePacket.Pong(in.readLong());
+      default -> throw new JavaWireException("unsupported status packet id=" + id);
+    };
+  }
+
+  private static JavaWirePacket decodeConfiguration(int id, DataInputStream in)
+      throws IOException, JavaWireException {
+    return switch (id) {
+      case 0x03 -> new JavaWirePacket.FinishConfiguration();
+      case 0x04 -> new JavaWirePacket.KeepAlive(in.readLong());
+      case 0x0E -> {
+        int count = readVarInt(in);
+        if (count < 0 || count > 1024) {
+          throw new JavaWireException("invalid known pack count");
+        }
+        List<JavaWirePacket.KnownPack> packs = new ArrayList<>();
+        for (int i = 0; i < count; i++) {
+          packs.add(
+              new JavaWirePacket.KnownPack(
+                  readString(in, 32767), readString(in, 32767), readString(in, 32767)));
+        }
+        yield new JavaWirePacket.KnownPacks(packs);
+      }
+      case 0x02 -> new JavaWirePacket.Disconnect(readString(in, 262144));
+      default -> throw new JavaWireException("unsupported configuration packet id=" + id);
+    };
+  }
+
+  public static void writeVarInt(OutputStream out, int value) throws IOException {
+    while ((value & ~0x7F) != 0) {
+      out.write((value & 0x7F) | 0x80);
+      value >>>= 7;
+    }
+    out.write(value);
+  }
+
+  public static int readVarInt(InputStream in) throws IOException, JavaWireException {
+    int value = 0;
+    int position = 0;
+    while (true) {
+      int next = in.read();
+      if (next < 0) {
+        throw new EOFException("truncated VarInt");
+      }
+      value |= (next & 0x7F) << position;
+      if ((next & 0x80) == 0) {
+        return value;
+      }
+      position += 7;
+      if (position >= 35) {
+        throw new JavaWireException("VarInt exceeds five bytes");
+      }
+    }
+  }
+
+  private static void writeString(OutputStream out, String value, int maxChars)
+      throws IOException, JavaWireException {
+    if (value == null || value.length() > maxChars) {
+      throw new JavaWireException("string exceeds limit");
+    }
+    byte[] bytes = value.getBytes(StandardCharsets.UTF_8);
+    if (bytes.length > MAX_STRING_BYTES) {
+      throw new JavaWireException("string bytes exceed limit");
+    }
+    writeVarInt(out, bytes.length);
+    out.write(bytes);
+  }
+
+  private static String readString(InputStream in, int maxChars)
+      throws IOException, JavaWireException {
+    int length = readVarInt(in);
+    if (length < 0 || length > MAX_STRING_BYTES) {
+      throw new JavaWireException("invalid string length");
+    }
+    byte[] bytes = in.readNBytes(length);
+    if (bytes.length != length) {
+      throw new EOFException("truncated string");
+    }
+    String value = new String(bytes, StandardCharsets.UTF_8);
+    if (value.length() > maxChars) {
+      throw new JavaWireException("string exceeds limit");
+    }
+    return value;
+  }
+
+  private static void writeUuid(OutputStream out, UUID uuid) throws IOException {
+    writeLong(out, uuid.getMostSignificantBits());
+    writeLong(out, uuid.getLeastSignificantBits());
+  }
+
+  private static UUID readUuid(InputStream in) throws IOException {
+    return new UUID(readLong(in), readLong(in));
+  }
+
+  private static void writeUnsignedShort(OutputStream out, int value) throws IOException {
+    if (value < 0 || value > 65535) {
+      throw new IOException("port out of range");
+    }
+    out.write(value >>> 8);
+    out.write(value);
+  }
+
+  private static void writeLong(OutputStream out, long value) throws IOException {
+    DataOutputStream data = new DataOutputStream(out);
+    data.writeLong(value);
+  }
+
+  private static long readLong(InputStream in) throws IOException {
+    return new DataInputStream(in).readLong();
+  }
+
+  private static byte[] compress(byte[] raw) throws IOException {
+    Deflater d = new Deflater();
+    d.setInput(raw);
+    d.finish();
+    byte[] buffer = new byte[raw.length + 128];
+    int length = d.deflate(buffer);
+    d.end();
+    return java.util.Arrays.copyOf(buffer, length);
+  }
+
+  private static byte[] decompress(byte[] compressed, int expected)
+      throws IOException, JavaWireException {
+    Inflater i = new Inflater();
+    i.setInput(compressed);
+    byte[] result = new byte[expected];
+    try {
+      int length = i.inflate(result);
+      if (length != expected || !i.finished()) {
+        throw new JavaWireException("invalid compressed Java packet");
+      }
+      return result;
+    } catch (DataFormatException e) {
+      throw new JavaWireException("invalid compressed Java packet", e);
+    } finally {
+      i.end();
+    }
+  }
+
+  public static final class Frame {
+    private final int packetId;
+    private final byte[] fields;
+
+    public Frame(int packetId, byte[] fields) {
+      this.packetId = packetId;
+      this.fields = fields.clone();
+    }
+
+    public int packetId() {
+      return packetId;
+    }
+
+    public byte[] fields() {
+      return fields.clone();
+    }
+  }
+}
