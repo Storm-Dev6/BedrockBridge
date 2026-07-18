@@ -245,4 +245,8 @@ The protocol-748 StartGame item list requires every vanilla item; an empty or gu
 be interoperable. The external provenance manifest and BDS runtime verification are complete, but
 the registry artifact remains local and uncommitted. Before implementing or staging that artifact,
 the exact fields, source observation, necessity, redistribution risk, and local-artifact loading
-path must be reviewed and approved separately.
+path must be reviewed and approved separately. The external unchanged-BDS loopback probe now
+performs the complete RakNet and NetworkSettings exchange and submits a synthetic Login, but the
+1.21.40.03 server did not return a clientbound game packet during the bounded observation window.
+No StartGame frame or production registry was therefore produced; the observer reports this
+authentication/interop boundary without bypassing BDS validation.

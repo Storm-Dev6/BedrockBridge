@@ -97,3 +97,17 @@ Ordinary tests build their own small directories and ZIP streams. They verify st
 manifests, deterministic sorting, official-source and version validation, traversal rejection,
 repository-boundary rejection, and the mandatory disclaimer. These tests contain no BDS-derived
 bytes or metadata.
+
+## Loopback observation checkpoint (2026-07-18)
+
+The unchanged `bedrock_server.exe` from the verified distribution was launched in the isolated
+external work directory `C:\Users\Gamestormzone\Documents\BDS\work\phase5-loopback-20260717-protocol748`.
+The probe completed RakNet negotiation and the protocol-748 NetworkSettings exchange, then sent a
+synthetic, locally signed Login request over the negotiated ZLIB connection. The BDS instance did
+not return a clientbound game packet within the bounded observation window, so no StartGame frame
+was observed and no real registry artifact was created. The process was stopped after the attempt.
+
+This is an authentication/interop boundary, not permission to fabricate a packet or bypass BDS
+validation. The repository therefore contains only the observer, extractor, and synthetic tests;
+the three-field production registry remains absent and the next successful observation requires a
+valid, lawfully obtained Bedrock login flow or an explicit protocol decision.

@@ -45,6 +45,7 @@ import java.net.SocketTimeoutException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.Signature;
@@ -94,22 +95,27 @@ public final class BdsLoopbackProbe implements AutoCloseable {
             new BedrockPacketValidator(new MtuPolicy(576, MTU, MTU)));
   }
 
-  /** Connects only to the supplied loopback port and reports observation metadata. */
+  /** Connects only to the supplied loopback port and writes the approved three-field artifact. */
   public static void main(String[] args) throws Exception {
-    if (args.length != 1) {
-      throw new IllegalArgumentException("Usage: <loopback-port>");
+    if (args.length != 2) {
+      throw new IllegalArgumentException("Usage: <loopback-port> <external-item-artifact>");
     }
     int port = Integer.parseInt(args[0]);
+    Path output = Path.of(args[1]).toAbsolutePath().normalize();
     try (var probe =
         new BdsLoopbackProbe(new InetSocketAddress(InetAddress.getLoopbackAddress(), port))) {
       Observation observation = probe.observeStartGame();
+      List<ObservedItem> items = observation.itemRegistry(BedrockProtocolLimits.defaults());
+      ItemRegistryArtifact.Summary summary = ItemRegistryArtifact.write(output, items);
       System.out.printf(
-          "protocol=%d threshold=%d algorithm=%s throttle=%s startGameBytes=%d%n",
+          "protocol=%d threshold=%d algorithm=%s throttle=%s itemCount=%d artifactBytes=%d artifactSha256=%s%n",
           BedrockProtocol.NETWORK_PROTOCOL_748,
           observation.settings().compressionThreshold(),
           observation.settings().compressionAlgorithm(),
           observation.settings().clientThrottleEnabled(),
-          observation.startGameFrame().length);
+          summary.itemCount(),
+          summary.byteCount(),
+          summary.sha256());
     }
   }
 
