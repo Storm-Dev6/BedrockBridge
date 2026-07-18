@@ -145,6 +145,24 @@ public final class BedrockJavaSession implements AutoCloseable {
     return authenticated.identity();
   }
 
+  /** Returns whether the post-handshake Bedrock cipher is active for connected traffic. */
+  public synchronized boolean encryptionActive() {
+    return authentication.state()
+        == io.bedrockbridge.bedrock.login.AuthenticationState.AUTHENTICATED;
+  }
+
+  /** Decrypts one connected payload after the client handshake, or copies plaintext setup data. */
+  public synchronized byte[] decryptConnected(byte[] payload) {
+    Objects.requireNonNull(payload, "payload");
+    return encryptionActive() ? authentication.decrypt(payload) : payload.clone();
+  }
+
+  /** Encrypts one connected payload after the client handshake, or copies plaintext setup data. */
+  public synchronized byte[] encryptConnected(byte[] payload) {
+    Objects.requireNonNull(payload, "payload");
+    return encryptionActive() ? authentication.encrypt(payload) : payload.clone();
+  }
+
   /** Returns the Java world state after the bounded Java Play Login boundary. */
   public synchronized JavaWorldState worldState() {
     if (upstream == null) {

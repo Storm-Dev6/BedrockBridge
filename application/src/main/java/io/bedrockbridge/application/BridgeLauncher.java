@@ -1,5 +1,6 @@
 package io.bedrockbridge.application;
 
+import io.bedrockbridge.bedrock.session.ConnectedFrameHandler;
 import io.bedrockbridge.common.DefaultEventBus;
 import io.bedrockbridge.common.EventBus;
 import io.bedrockbridge.common.ExecutorTaskScheduler;
@@ -12,8 +13,10 @@ import io.bedrockbridge.observability.BridgeMetrics;
 import io.bedrockbridge.registry.generator.RegistryCheckCli;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import java.net.InetSocketAddress;
 import java.nio.file.Path;
 import java.time.Clock;
+import java.util.function.BiFunction;
 
 /** Standalone composition root and command-line entry point for BedrockBridge. */
 public final class BridgeLauncher {
@@ -60,6 +63,17 @@ public final class BridgeLauncher {
 
   /** Creates a production composition with no hidden service locator outside this root. */
   public static BedrockBridge create(BridgeConfiguration configuration) {
+    return create(configuration, null);
+  }
+
+  /**
+   * Creates a production composition with an explicitly supplied connected-DATA handler factory.
+   * The factory is intentionally not synthesized here: callers must provide an explicit Bedrock
+   * authentication trust policy and a StartGame registry provider before accepting real clients.
+   */
+  public static BedrockBridge create(
+      BridgeConfiguration configuration,
+      BiFunction<Integer, InetSocketAddress, ConnectedFrameHandler> connectedHandlerFactory) {
     ServiceContainer services = new ServiceContainer();
     EventBus eventBus = new DefaultEventBus();
     TaskScheduler scheduler =
@@ -72,7 +86,10 @@ public final class BridgeLauncher {
         .register(BridgeMetrics.class, new BridgeMetrics(meterRegistry));
     BedrockServerRuntime runtime =
         new BedrockServerRuntime(
-            configuration, services.require(TaskScheduler.class), Clock.systemUTC());
+            configuration,
+            services.require(TaskScheduler.class),
+            Clock.systemUTC(),
+            connectedHandlerFactory);
     return new BedrockBridge(
         configuration,
         services.require(EventBus.class),

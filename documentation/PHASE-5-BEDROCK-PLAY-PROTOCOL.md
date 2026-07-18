@@ -249,11 +249,12 @@ Gradle test lifecycle. They complement targeted vectors rather than hiding failu
 
 Phase 5 establishes a bounded control-flow and upstream world-state seam, not a claim of playable
 Bedrock spawn. Chunk, entity, inventory, movement, chat, command, UI, and Java-edition translation
-packets belong to later phases. The live RakNet connected-data adapter still needs to dispatch
-reassembled game payloads into this orchestrator. A real Bedrock spawn additionally requires the
-approved external protocol-748 registry artifact and a manual client test. Snappy compression and
-additional Bedrock 1.21.x protocol numbers are explicit future deltas, not silently accepted aliases
-of protocol 748.
+packets belong to later phases. The live RakNet connected-data adapter now dispatches reassembled,
+ordered game payloads into this orchestrator and fragments outbound batches at the negotiated
+MTU-safe bound. A real Bedrock spawn additionally requires a configured Bedrock authentication trust
+policy, the approved external protocol-748 registry artifact, and a manual client test. Snappy
+compression and additional Bedrock 1.21.x protocol numbers are explicit future deltas, not silently
+accepted aliases of protocol 748.
 
 ## Current approval boundary
 
@@ -289,6 +290,10 @@ RakNet admission runtime, decodes Login connection requests, applies the configu
 offline authentication policy, and exposes a typed Java-upstream state foundation for handshake,
 status, login, configuration, and play. The developer distribution includes
 `BedrockBridge-<version>.jar`; it contains no registry or Microsoft/Xbox credential material.
+The composition root also exposes an explicit connected-DATA handler-factory overload; a deployment
+must inject its own pinned Bedrock certificate trust policy, upstream connector, and validated
+StartGame provider through that seam. The default launcher intentionally leaves the factory unset
+until those external inputs exist.
 
 ### Work-package record: Bedrock-to-Java session seam
 
@@ -300,9 +305,21 @@ status, login, configuration, and play. The developer distribution includes
 - Result: Bedrock authentication policy, Java world-ready wait, encryption-handshake/resource-pack
   ordering, bounded Java PLAY pump, and safe Java disconnect forwarding are implemented. The
   StartGame provider remains fail-closed on `BLOCKED_EXTERNAL_OFFICIAL_ARTIFACT`.
-- Next gate: connect the live reassembled RakNet DATA adapter to this seam, then perform a manual
-  Bedrock-client StartGame/spawn test with the separately approved external registry. No main-branch
-  merge was performed.
+- Next gate: configure the Bedrock authentication trust policy and perform a manual Bedrock-client
+  StartGame/spawn test with the separately approved external registry. No main-branch merge was
+  performed.
+
+### Work-package record: connected RakNet DATA pipeline
+
+- The handshake-admitted `BedrockSession` now creates a bounded `RakNetSession`, routes DATA/ACK/NACK
+  datagrams through its receive window, split assembler, ordering channels, and recovery queue, and
+  flushes acknowledgements immediately.
+- Outbound connected payloads are split into 1,440-byte reliable-ordered fragments before enqueueing;
+  the application `BedrockConnectedPlayAdapter` decodes the `0xFE` game marker, negotiated zlib/raw
+  batch, typed protocol-748 packets, and re-encodes the session output.
+- Regression coverage is in `bedrock-session/src/test/.../BedrockSessionTest.java` and
+  `application/src/test/.../BedrockConnectedPlayAdapterTest.java`. No StartGame fields or registry
+  entries are fabricated.
 
 ## Java upstream vertical slice
 

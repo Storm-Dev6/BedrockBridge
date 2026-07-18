@@ -1,7 +1,9 @@
 package io.bedrockbridge.bedrock.session;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.bedrockbridge.bedrock.codec.BedrockDatagramCodec;
 import io.bedrockbridge.bedrock.codec.BedrockPacketRegistry;
@@ -9,8 +11,16 @@ import io.bedrockbridge.bedrock.codec.BedrockPacketValidator;
 import io.bedrockbridge.bedrock.login.BedrockLoginState;
 import io.bedrockbridge.bedrock.login.BedrockLoginStateMachine;
 import io.bedrockbridge.bedrock.login.ProtocolVersionNegotiator;
+import io.bedrockbridge.bedrock.packet.ConnectionRequest;
+import io.bedrockbridge.bedrock.packet.NewIncomingConnection;
 import io.bedrockbridge.bedrock.packet.OpenConnectionRequest1;
+import io.bedrockbridge.bedrock.packet.OpenConnectionRequest2;
+import io.bedrockbridge.network.core.DatagramHandler;
+import io.bedrockbridge.network.core.UdpTransport;
 import io.bedrockbridge.network.raknet.MtuPolicy;
+import io.bedrockbridge.network.raknet.RakNetFrame;
+import io.bedrockbridge.network.raknet.RakNetFrameCodec;
+import io.bedrockbridge.network.raknet.Reliability;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
@@ -45,5 +55,108 @@ class BedrockSessionTest {
     assertEquals(BedrockLoginState.MTU_NEGOTIATED, session.state());
     session.tick(Instant.EPOCH.plusSeconds(10));
     assertEquals(BedrockLoginState.DISCONNECTED, session.state());
+  }
+
+  @Test
+  void routesConnectedRakNetDataToPlayHandlerAndFlushesAck() {
+    var codec =
+        new BedrockDatagramCodec(
+            BedrockPacketRegistry.create(),
+            new BedrockPacketValidator(new MtuPolicy(576, 1492, 1492)));
+    InetSocketAddress remote = new InetSocketAddress(InetAddress.getLoopbackAddress(), 19132);
+    FakeTransport transport = new FakeTransport();
+    List<byte[]> received = new ArrayList<>();
+    var session =
+        new BedrockSession(
+            remote,
+            codec,
+            new BedrockLoginStateMachine(7, remote, new ProtocolVersionNegotiator()),
+            Duration.ofSeconds(10),
+            payload -> {},
+            transport,
+            (payload, outbound) -> {
+              byte[] bytes = new byte[payload.remaining()];
+              payload.duplicate().get(bytes);
+              received.add(bytes);
+              outbound.accept(ByteBuffer.wrap(new byte[3_000]));
+            },
+            Instant.EPOCH);
+
+    receive(session, codec, new OpenConnectionRequest1(11, 1200));
+    receive(
+        session,
+        codec,
+        new OpenConnectionRequest2(
+            new InetSocketAddress(InetAddress.getLoopbackAddress(), 19132), 1200, 55));
+    receive(session, codec, new ConnectionRequest(55, 1, false));
+    receive(
+        session,
+        codec,
+        new NewIncomingConnection(remote, NewIncomingConnectionTestAddresses.addresses(), 1, 2));
+
+    ByteBuffer datagram = ByteBuffer.allocate(128);
+    datagram.put((byte) 0x80);
+    RakNetFrameCodec.putTriad(datagram, 0);
+    new RakNetFrameCodec()
+        .encode(
+            new RakNetFrame(
+                Reliability.RELIABLE_ORDERED,
+                0,
+                0,
+                0,
+                0,
+                null,
+                ByteBuffer.wrap(new byte[] {(byte) 0xFE, 0x01, 0x02})),
+            datagram);
+    datagram.flip();
+    session.receive(datagram, Instant.EPOCH.plusMillis(1));
+
+    assertEquals(BedrockLoginState.CONNECTED, session.state());
+    assertEquals(1, received.size());
+    assertArrayEquals(new byte[] {(byte) 0xFE, 0x01, 0x02}, received.getFirst());
+    assertFalse(transport.sent.isEmpty());
+    assertTrue(transport.sent.stream().anyMatch(value -> Byte.toUnsignedInt(value[0]) == 0xC0));
+    assertTrue(
+        transport.sent.stream().filter(value -> Byte.toUnsignedInt(value[0]) == 0x80).count() >= 3);
+  }
+
+  private static void receive(BedrockSession session, BedrockDatagramCodec codec, Object packet) {
+    ByteBuffer buffer = ByteBuffer.allocate(1500);
+    codec.encode((io.bedrockbridge.protocol.Packet) packet, buffer);
+    buffer.flip();
+    session.receive(buffer, Instant.EPOCH);
+  }
+
+  private static final class NewIncomingConnectionTestAddresses {
+    private static List<InetSocketAddress> addresses() {
+      List<InetSocketAddress> addresses = new ArrayList<>();
+      for (int index = 0; index < 20; index++) {
+        addresses.add(new InetSocketAddress(InetAddress.getLoopbackAddress(), 19132));
+      }
+      return addresses;
+    }
+  }
+
+  private static final class FakeTransport implements UdpTransport {
+    private final List<byte[]> sent = new ArrayList<>();
+
+    @Override
+    public void start(DatagramHandler handler) {}
+
+    @Override
+    public boolean send(InetSocketAddress remoteAddress, ByteBuffer payload) {
+      byte[] bytes = new byte[payload.remaining()];
+      payload.duplicate().get(bytes);
+      sent.add(bytes);
+      return true;
+    }
+
+    @Override
+    public InetSocketAddress localAddress() {
+      return new InetSocketAddress(InetAddress.getLoopbackAddress(), 19133);
+    }
+
+    @Override
+    public void close() {}
   }
 }

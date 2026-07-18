@@ -31,6 +31,7 @@ public final class BedrockSessionBootstrap implements AutoCloseable {
   private final long serverGuid;
   private final int maximumSessions;
   private final Duration timeout;
+  private final ConnectedFrameHandlerFactory connectedHandlerFactory;
   private final ConcurrentHashMap<InetSocketAddress, BedrockSession> sessions =
       new ConcurrentHashMap<>();
   private final TickScheduler ticks;
@@ -46,6 +47,52 @@ public final class BedrockSessionBootstrap implements AutoCloseable {
       Duration timeout,
       Duration tickInterval,
       MtuPolicy mtuPolicy) {
+    this(
+        transport,
+        scheduler,
+        clock,
+        serverGuid,
+        maximumSessions,
+        timeout,
+        tickInterval,
+        mtuPolicy,
+        (ConnectedFrameHandlerFactory) null);
+  }
+
+  /** Starts UDP admission with an optional handler for reassembled connected DATA payloads. */
+  public BedrockSessionBootstrap(
+      UdpTransport transport,
+      TaskScheduler scheduler,
+      Clock clock,
+      long serverGuid,
+      int maximumSessions,
+      Duration timeout,
+      Duration tickInterval,
+      MtuPolicy mtuPolicy,
+      ConnectedFrameHandler connectedHandler) {
+    this(
+        transport,
+        scheduler,
+        clock,
+        serverGuid,
+        maximumSessions,
+        timeout,
+        tickInterval,
+        mtuPolicy,
+        connectedHandler == null ? null : ignored -> connectedHandler);
+  }
+
+  /** Starts UDP admission with one handler factory per remote endpoint. */
+  public BedrockSessionBootstrap(
+      UdpTransport transport,
+      TaskScheduler scheduler,
+      Clock clock,
+      long serverGuid,
+      int maximumSessions,
+      Duration timeout,
+      Duration tickInterval,
+      MtuPolicy mtuPolicy,
+      ConnectedFrameHandlerFactory connectedHandlerFactory) {
     this.transport = Objects.requireNonNull(transport, "transport");
     this.clock = Objects.requireNonNull(clock, "clock");
     this.serverGuid = serverGuid;
@@ -54,6 +101,7 @@ public final class BedrockSessionBootstrap implements AutoCloseable {
     }
     this.maximumSessions = maximumSessions;
     this.timeout = Objects.requireNonNull(timeout, "timeout");
+    this.connectedHandlerFactory = connectedHandlerFactory;
     codec =
         new BedrockDatagramCodec(
             BedrockPacketRegistry.create(), new BedrockPacketValidator(mtuPolicy));
@@ -114,6 +162,8 @@ public final class BedrockSessionBootstrap implements AutoCloseable {
         new BedrockLoginStateMachine(serverGuid, address, new ProtocolVersionNegotiator()),
         timeout,
         payload -> transport.send(address, payload),
+        transport,
+        connectedHandlerFactory == null ? null : connectedHandlerFactory.create(address),
         now);
   }
 
