@@ -318,3 +318,42 @@ flags, tags, and client information). These are intentionally rejected as unsupp
 decoded from guessed fields. Consequently, the first remaining blocking state for a real server is
 the configuration registry-data/feature stream, followed by StartGame construction on Bedrock,
 which remains fail-closed on `BLOCKED_EXTERNAL_OFFICIAL_ARTIFACT`.
+
+## Java Configuration verification
+
+Configuration now sends Client Information and Known Packs, and validates clientbound Registry
+Data (`0x07`), Feature Flags (`0x0C`), Update Tags (`0x0D`), keep-alive (`0x04`), and Finish
+Configuration (`0x03`). Registry entry NBT is decoded with bounded depth, element counts, string
+sizes, and all standard tag kinds. Invalid identifiers, negative tag IDs, malformed NBT, unknown
+tag kinds, and unknown packet IDs fail closed with the exact hexadecimal packet ID.
+
+The opt-in test `JavaRealServerManualTest` was run against the existing local Paper
+`paper-1.21.1-133.jar` (Java protocol 767) with `online-mode=false`, `server-port=25565`, and
+`enforce-secure-profile=true`. The server accepted the handshake and offline Login Start, then the
+bridge reached Configuration and sent Client Information. The first real server packet not yet
+implemented was Configuration packet `0x01` (clientbound plugin message); the test stopped there
+with `unsupported configuration packet id=0x01`. This is the current documented boundary; the
+server process was stopped and its original `online-mode=true` setting restored afterward.
+
+For manual reproduction, temporarily set `online-mode=false` in the local Java server's
+`server.properties`, keep `server-port=25565`, and run:
+
+```text
+$env:BEDROCKBRIDGE_REAL_JAVA='true'
+./gradlew.bat --no-daemon :application:test --tests io.bedrockbridge.application.javawire.JavaRealServerManualTest
+```
+
+The bridge properties must still include every required field from
+`application/src/main/resources/bridge.properties.example`, including an externally generated
+protocol-748 registry path, version, and SHA-256. CI never downloads or stores a Java server binary.
+
+## Static multi-upstream routing
+
+Named upstream definitions use the unbounded `bridge.upstream.<name>.*` property namespace. Each
+entry requires `address` and `port`, with optional `connect-timeout-ms` and `read-timeout-ms`.
+Listener mappings use `bridge.listener.<bedrock-port>.upstream`; the runtime starts one UDP
+listener per mapping and `connectJavaUpstream(port, username)` resolves that listener to its named
+Java endpoint. There is no hardcoded seven-server limit; the example contains seven named
+upstreams (`lobby`, `survival`, `skyblock`, `creative`, `minigames`, `events`, `testing`) and seven
+additional Bedrock ports. The legacy single-upstream properties remain valid and create a `default`
+mapping automatically. Dynamic server selection is intentionally not part of this slice.

@@ -92,13 +92,26 @@ public final class BedrockBridge implements AutoCloseable {
   /** Opens and logs into the configured offline Java upstream for one Bedrock session. */
   public JavaUpstreamConnection connectJavaUpstream(String username)
       throws IOException, io.bedrockbridge.application.javawire.JavaWireException {
+    return connectJavaUpstream(configuration.bindPort(), username);
+  }
+
+  /** Opens the statically mapped Java upstream for a specific Bedrock listener port. */
+  public JavaUpstreamConnection connectJavaUpstream(int bedrockPort, String username)
+      throws IOException, io.bedrockbridge.application.javawire.JavaWireException {
+    String upstreamName = configuration.listenerUpstreamNames().get(bedrockPort);
+    if (upstreamName == null) {
+      throw new IllegalArgumentException(
+          "No Java upstream mapping for Bedrock port " + bedrockPort);
+    }
+    io.bedrockbridge.config.JavaUpstreamDefinition upstream =
+        configuration.namedUpstreams().get(upstreamName);
     JavaUpstreamConnection connection =
         JavaUpstreamConnection.loginOffline(
-            configuration.upstreamAddress(),
-            configuration.upstreamPort(),
+            upstream.address(),
+            upstream.port(),
             username,
-            5_000,
-            15_000,
+            upstream.connectTimeoutMillis(),
+            upstream.readTimeoutMillis(),
             new JavaBedrockTranslator());
     upstreamConnections.add(connection);
     return connection;

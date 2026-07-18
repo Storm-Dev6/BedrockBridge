@@ -10,3 +10,26 @@ bridge.registry-path=C:/Users/example/.bedrockbridge/item-registry-748.ndjson
 bridge.registry-protocol-version=748
 bridge.registry-sha256=replace-with-local-artifact-sha256
 bridge.offline-auth-mode=deny
+
+# Optional static named-upstream routing. The default listener mapping remains active.
+bridge.upstream.lobby.address=127.0.0.1
+bridge.upstream.lobby.port=25565
+bridge.upstream.survival.address=127.0.0.1
+bridge.upstream.survival.port=25566
+bridge.upstream.skyblock.address=127.0.0.1
+bridge.upstream.skyblock.port=25567
+bridge.upstream.creative.address=127.0.0.1
+bridge.upstream.creative.port=25568
+bridge.upstream.minigames.address=127.0.0.1
+bridge.upstream.minigames.port=25569
+bridge.upstream.events.address=127.0.0.1
+bridge.upstream.events.port=25570
+bridge.upstream.testing.address=127.0.0.1
+bridge.upstream.testing.port=25571
+bridge.listener.19133.upstream=lobby
+bridge.listener.19134.upstream=survival
+bridge.listener.19135.upstream=skyblock
+bridge.listener.19136.upstream=creative
+bridge.listener.19137.upstream=minigames
+bridge.listener.19138.upstream=events
+bridge.listener.19139.upstream=testing

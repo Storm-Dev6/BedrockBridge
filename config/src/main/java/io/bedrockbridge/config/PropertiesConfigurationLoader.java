@@ -6,6 +6,8 @@ import java.io.Reader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Properties;
 
@@ -22,19 +24,25 @@ public final class PropertiesConfigurationLoader implements ConfigurationLoader 
     }
     rejectUnknownProperties(properties);
     try {
+      String bindAddress = required(properties, "bridge.bind-address");
+      int bindPort = integer(properties, "bridge.bind-port");
+      String upstreamAddress = required(properties, "bridge.upstream-address");
+      int upstreamPort = integer(properties, "bridge.upstream-port");
       return new BridgeConfiguration(
           required(properties, "bridge.application-name"),
-          required(properties, "bridge.bind-address"),
-          integer(properties, "bridge.bind-port"),
-          required(properties, "bridge.upstream-address"),
-          integer(properties, "bridge.upstream-port"),
+          bindAddress,
+          bindPort,
+          upstreamAddress,
+          upstreamPort,
           integer(properties, "bridge.maximum-sessions"),
           integer(properties, "bridge.scheduler-threads"),
           bool(properties, "bridge.development-mode"),
           optional(properties, "bridge.registry-path"),
           optional(properties, "bridge.registry-protocol-version"),
           optional(properties, "bridge.registry-sha256"),
-          optionalOr(properties, "bridge.offline-auth-mode", "deny"));
+          optionalOr(properties, "bridge.offline-auth-mode", "deny"),
+          parseUpstreams(properties, upstreamAddress, upstreamPort),
+          parseListenerMappings(properties, bindPort));
     } catch (IllegalArgumentException failure) {
       throw new ConfigurationException("Invalid configuration: " + failure.getMessage(), failure);
     }
@@ -75,6 +83,79 @@ public final class PropertiesConfigurationLoader implements ConfigurationLoader 
     return Boolean.parseBoolean(value);
   }
 
+  private static Map<String, JavaUpstreamDefinition> parseUpstreams(
+      Properties properties, String defaultAddress, int defaultPort) {
+    Map<String, JavaUpstreamDefinition> result = new LinkedHashMap<>();
+    result.put(
+        "default",
+        new JavaUpstreamDefinition("default", defaultAddress, defaultPort, 5_000, 15_000));
+    Map<String, Map<String, String>> fields = new LinkedHashMap<>();
+    String prefix = "bridge.upstream.";
+    for (Object rawKey : properties.keySet()) {
+      String key = rawKey.toString();
+      if (!key.startsWith(prefix)) {
+        continue;
+      }
+      String suffix = key.substring(prefix.length());
+      int separator = suffix.indexOf('.');
+      if (separator < 1) {
+        throw new IllegalArgumentException("Invalid named upstream property: " + key);
+      }
+      String name = suffix.substring(0, separator);
+      String field = suffix.substring(separator + 1);
+      if (!field.equals("address")
+          && !field.equals("port")
+          && !field.equals("connect-timeout-ms")
+          && !field.equals("read-timeout-ms")) {
+        throw new IllegalArgumentException("Unknown named upstream field: " + key);
+      }
+      fields
+          .computeIfAbsent(name, ignored -> new LinkedHashMap<>())
+          .put(field, required(properties, key));
+    }
+    for (Map.Entry<String, Map<String, String>> entry : fields.entrySet()) {
+      Map<String, String> value = entry.getValue();
+      if (!value.containsKey("address") || !value.containsKey("port")) {
+        throw new IllegalArgumentException(
+            "Named upstream requires address and port: " + entry.getKey());
+      }
+      result.put(
+          entry.getKey(),
+          new JavaUpstreamDefinition(
+              entry.getKey(),
+              value.get("address"),
+              parseInteger(value.get("port"), "upstream port"),
+              parseInteger(value.getOrDefault("connect-timeout-ms", "5000"), "connect timeout"),
+              parseInteger(value.getOrDefault("read-timeout-ms", "15000"), "read timeout")));
+    }
+    return result;
+  }
+
+  private static Map<Integer, String> parseListenerMappings(
+      Properties properties, int defaultPort) {
+    Map<Integer, String> result = new LinkedHashMap<>();
+    result.put(defaultPort, "default");
+    String prefix = "bridge.listener.";
+    for (Object rawKey : properties.keySet()) {
+      String key = rawKey.toString();
+      if (!key.startsWith(prefix) || !key.endsWith(".upstream")) {
+        continue;
+      }
+      String portText = key.substring(prefix.length(), key.length() - ".upstream".length());
+      int port = parseInteger(portText, "listener port");
+      result.put(port, required(properties, key));
+    }
+    return result;
+  }
+
+  private static int parseInteger(String value, String label) {
+    try {
+      return Integer.parseInt(value);
+    } catch (NumberFormatException failure) {
+      throw new IllegalArgumentException(label + " must be an integer", failure);
+    }
+  }
+
   private static void rejectUnknownProperties(Properties properties) {
     var accepted =
         java.util.Set.of(
@@ -90,8 +171,11 @@ public final class PropertiesConfigurationLoader implements ConfigurationLoader 
             "bridge.registry-protocol-version",
             "bridge.registry-sha256",
             "bridge.offline-auth-mode");
-    for (Object key : properties.keySet()) {
-      if (!accepted.contains(key.toString())) {
+    for (Object keyObject : properties.keySet()) {
+      String key = keyObject.toString();
+      if (!accepted.contains(key)
+          && !key.startsWith("bridge.upstream.")
+          && !(key.startsWith("bridge.listener.") && key.endsWith(".upstream"))) {
         throw new ConfigurationException("Unknown configuration property: " + key);
       }
     }

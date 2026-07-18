@@ -9,6 +9,8 @@ import io.bedrockbridge.network.udp.NioUdpTransport;
 import java.net.InetSocketAddress;
 import java.time.Clock;
 import java.time.Duration;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /** Owns the real UDP listener and bounded RakNet admission path for Bedrock clients. */
@@ -17,9 +19,9 @@ public final class BedrockServerRuntime implements AutoCloseable {
   private final TaskScheduler scheduler;
   private final Clock clock;
   private final AtomicBoolean started = new AtomicBoolean();
-  private NioUdpTransport transport;
-  private DirectPacketBufferPool buffers;
-  private BedrockSessionBootstrap sessions;
+  private final Map<Integer, NioUdpTransport> transports = new LinkedHashMap<>();
+  private final Map<Integer, DirectPacketBufferPool> buffers = new LinkedHashMap<>();
+  private final Map<Integer, BedrockSessionBootstrap> sessions = new LinkedHashMap<>();
 
   public BedrockServerRuntime(
       BridgeConfiguration configuration, TaskScheduler scheduler, Clock clock) {
@@ -33,24 +35,30 @@ public final class BedrockServerRuntime implements AutoCloseable {
       throw new IllegalStateException("Bedrock server runtime already started");
     }
     try {
-      buffers = new DirectPacketBufferPool(65_507, configuration.maximumSessions());
-      transport =
-          new NioUdpTransport(
-              new InetSocketAddress(configuration.bindAddress(), configuration.bindPort()),
-              65_507,
-              configuration.maximumSessions() * 8,
-              buffers,
-              clock);
-      sessions =
-          new BedrockSessionBootstrap(
-              transport,
-              scheduler,
-              clock,
-              0x4244524F434B3734L,
-              configuration.maximumSessions(),
-              Duration.ofSeconds(30),
-              Duration.ofSeconds(1),
-              new MtuPolicy(576, 1_492, 1_492));
+      for (int listenerPort : configuration.listenerUpstreamNames().keySet()) {
+        DirectPacketBufferPool listenerBuffers =
+            new DirectPacketBufferPool(65_507, configuration.maximumSessions());
+        NioUdpTransport listenerTransport =
+            new NioUdpTransport(
+                new InetSocketAddress(configuration.bindAddress(), listenerPort),
+                65_507,
+                configuration.maximumSessions() * 8,
+                listenerBuffers,
+                clock);
+        BedrockSessionBootstrap listenerSessions =
+            new BedrockSessionBootstrap(
+                listenerTransport,
+                scheduler,
+                clock,
+                0x4244524F434B3734L + listenerPort,
+                configuration.maximumSessions(),
+                Duration.ofSeconds(30),
+                Duration.ofSeconds(1),
+                new MtuPolicy(576, 1_492, 1_492));
+        buffers.put(listenerPort, listenerBuffers);
+        transports.put(listenerPort, listenerTransport);
+        sessions.put(listenerPort, listenerSessions);
+      }
     } catch (RuntimeException failure) {
       close();
       throw failure;
@@ -58,6 +66,7 @@ public final class BedrockServerRuntime implements AutoCloseable {
   }
 
   public synchronized InetSocketAddress localAddress() {
+    NioUdpTransport transport = transports.get(configuration.bindPort());
     if (transport == null) {
       throw new IllegalStateException("Bedrock server runtime is not started");
     }
@@ -66,11 +75,11 @@ public final class BedrockServerRuntime implements AutoCloseable {
 
   @Override
   public synchronized void close() {
-    if (sessions != null) {
-      sessions.close();
-      sessions = null;
-      transport = null;
-      buffers = null;
+    if (!sessions.isEmpty()) {
+      sessions.values().forEach(BedrockSessionBootstrap::close);
+      sessions.clear();
+      transports.clear();
+      buffers.clear();
     }
   }
 }
