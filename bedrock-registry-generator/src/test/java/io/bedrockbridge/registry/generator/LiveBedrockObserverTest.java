@@ -154,11 +154,21 @@ class LiveBedrockObserverTest {
   }
 
   private static Path externalTempDirectory() throws Exception {
-    String temp = System.getenv("TEMP");
-    if (temp == null || temp.isBlank()) {
-      temp = System.getProperty("java.io.tmpdir");
+    String temp = firstNonBlank(System.getenv("TEMP"));
+    if (temp == null) {
+      temp = firstNonBlank(System.getenv("TMPDIR"));
+    }
+    if (temp == null) {
+      temp = firstNonBlank(System.getenv("TMP"));
+    }
+    if (temp == null) {
+      temp = System.getProperty("user.home");
     }
     return Files.createTempDirectory(Path.of(temp), "bedrockbridge-observer-");
+  }
+
+  private static String firstNonBlank(String value) {
+    return value == null || value.isBlank() ? null : value;
   }
 
   private static KeyPair p384KeyPair() throws Exception {
