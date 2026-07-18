@@ -49,9 +49,9 @@ public final class BridgeLauncher {
     }
     try {
       RegistryCheckCli.validate(
-              Path.of(configuration.registryPath()),
-              configuration.registryProtocolVersion(),
-              configuration.registrySha256());
+          Path.of(configuration.registryPath()),
+          configuration.registryProtocolVersion(),
+          configuration.registrySha256());
     } catch (java.io.IOException | RuntimeException failure) {
       throw new IllegalStateException(
           "BLOCKED_EXTERNAL_OFFICIAL_ARTIFACT: external registry validation failed", failure);
