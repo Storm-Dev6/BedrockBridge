@@ -52,8 +52,10 @@ public record BridgeConfiguration(
     schedulerThreads = Checks.inRange(schedulerThreads, 1, 64, "schedulerThreads");
     registryPath = registryPath == null ? "" : registryPath.trim();
     registryProtocolVersion = registryProtocolVersion == null ? "" : registryProtocolVersion.trim();
-    registrySha256 = registrySha256 == null ? "" : registrySha256.trim().toLowerCase(java.util.Locale.ROOT);
-    offlineAuthMode = Checks.notBlank(offlineAuthMode, "offlineAuthMode").toLowerCase(java.util.Locale.ROOT);
+    registrySha256 =
+        registrySha256 == null ? "" : registrySha256.trim().toLowerCase(java.util.Locale.ROOT);
+    offlineAuthMode =
+        Checks.notBlank(offlineAuthMode, "offlineAuthMode").toLowerCase(java.util.Locale.ROOT);
     if (!offlineAuthMode.equals("deny") && !offlineAuthMode.equals("allow-self-signed")) {
       throw new IllegalArgumentException("offlineAuthMode must be deny or allow-self-signed");
     }
