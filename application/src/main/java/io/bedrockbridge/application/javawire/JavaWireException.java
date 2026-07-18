@@ -1,7 +1,7 @@
 package io.bedrockbridge.application.javawire;
 
 /** Malformed or unsupported Java wire data. */
-public final class JavaWireException extends Exception {
+public class JavaWireException extends Exception {
   private static final long serialVersionUID = 1L;
 
   public JavaWireException(String message) {
