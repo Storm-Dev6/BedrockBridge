@@ -26,6 +26,13 @@ public sealed interface JavaWirePacket
         JavaWirePacket.PlayKeepAlive,
         JavaWirePacket.BundleDelimiter,
         JavaWirePacket.SpawnEntity,
+        JavaWirePacket.EntityMetadataIgnored,
+        JavaWirePacket.TeleportEntity,
+        JavaWirePacket.BlockUpdate,
+        JavaWirePacket.SectionBlocksUpdate,
+        JavaWirePacket.RemoveEntities,
+        JavaWirePacket.SetExperience,
+        JavaWirePacket.SetHealth,
         JavaWirePacket.PlayDisconnect,
         JavaWirePacket.SystemChat,
         JavaWirePacket.SynchronizePlayerPosition,
@@ -157,6 +164,32 @@ public sealed interface JavaWirePacket
       short velocityY,
       short velocityZ)
       implements JavaWirePacket {}
+
+  /** Metadata payload is retained only as a bounded opaque frame until registry data is present. */
+  record EntityMetadataIgnored(int payloadBytes) implements JavaWirePacket {}
+
+  record TeleportEntity(
+      int entityId, double x, double y, double z, int yaw, int pitch, boolean onGround)
+      implements JavaWirePacket {}
+
+  record BlockUpdate(BlockPosition location, int blockStateId) implements JavaWirePacket {}
+
+  record SectionBlocksUpdate(long sectionPosition, java.util.List<Long> blocks)
+      implements JavaWirePacket {
+    public SectionBlocksUpdate {
+      blocks = java.util.List.copyOf(blocks);
+    }
+  }
+
+  record RemoveEntities(java.util.List<Integer> entityIds) implements JavaWirePacket {
+    public RemoveEntities {
+      entityIds = java.util.List.copyOf(entityIds);
+    }
+  }
+
+  record SetExperience(float progress, int level, int totalExperience) implements JavaWirePacket {}
+
+  record SetHealth(float health, int food, float saturation) implements JavaWirePacket {}
 
   record PlayDisconnect(JavaNbt reason) implements JavaWirePacket {
     public PlayDisconnect(String reasonJson) {

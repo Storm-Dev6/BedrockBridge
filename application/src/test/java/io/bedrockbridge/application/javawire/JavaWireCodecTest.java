@@ -297,6 +297,87 @@ class JavaWireCodecTest {
   }
 
   @Test
+  void boundsOpaqueEntityMetadataAndDecodesTeleportEntity() throws Exception {
+    JavaWirePacket.EntityMetadataIgnored metadata =
+        (JavaWirePacket.EntityMetadataIgnored)
+            JavaWireCodec.decode(JavaWireState.PLAY, 0x58, new byte[] {1, 2, 3});
+    assertEquals(3, metadata.payloadBytes());
+
+    ByteArrayOutputStream teleport = new ByteArrayOutputStream();
+    DataOutputStream data = new DataOutputStream(teleport);
+    JavaWireCodec.writeVarInt(teleport, 7);
+    data.writeDouble(1.0);
+    data.writeDouble(64.0);
+    data.writeDouble(-2.0);
+    data.writeByte(20);
+    data.writeByte(30);
+    data.writeBoolean(true);
+    JavaWirePacket.TeleportEntity decoded =
+        (JavaWirePacket.TeleportEntity)
+            JavaWireCodec.decode(JavaWireState.PLAY, 0x70, teleport.toByteArray());
+    assertEquals(7, decoded.entityId());
+    assertEquals(64.0, decoded.y());
+    assertEquals(true, decoded.onGround());
+  }
+
+  @Test
+  void decodesBoundedBlockAndEntityLifecycleUpdates() throws Exception {
+    ByteArrayOutputStream block = new ByteArrayOutputStream();
+    DataOutputStream blockData = new DataOutputStream(block);
+    blockData.writeLong(0L);
+    JavaWireCodec.writeVarInt(block, 42);
+    JavaWirePacket.BlockUpdate decodedBlock =
+        (JavaWirePacket.BlockUpdate)
+            JavaWireCodec.decode(JavaWireState.PLAY, 0x09, block.toByteArray());
+    assertEquals(42, decodedBlock.blockStateId());
+
+    ByteArrayOutputStream section = new ByteArrayOutputStream();
+    DataOutputStream sectionData = new DataOutputStream(section);
+    sectionData.writeLong(0L);
+    JavaWireCodec.writeVarInt(section, 1);
+    section.write(0x80);
+    section.write(0x01);
+    JavaWirePacket.SectionBlocksUpdate decodedSection =
+        (JavaWirePacket.SectionBlocksUpdate)
+            JavaWireCodec.decode(JavaWireState.PLAY, 0x49, section.toByteArray());
+    assertEquals(List.of(128L), decodedSection.blocks());
+
+    ByteArrayOutputStream removed = new ByteArrayOutputStream();
+    JavaWireCodec.writeVarInt(removed, 2);
+    JavaWireCodec.writeVarInt(removed, 7);
+    JavaWireCodec.writeVarInt(removed, 8);
+    JavaWirePacket.RemoveEntities decodedRemoved =
+        (JavaWirePacket.RemoveEntities)
+            JavaWireCodec.decode(JavaWireState.PLAY, 0x42, removed.toByteArray());
+    assertEquals(List.of(7, 8), decodedRemoved.entityIds());
+  }
+
+  @Test
+  void decodesExperienceAndHealthUpdatesWithBounds() throws Exception {
+    ByteArrayOutputStream experience = new ByteArrayOutputStream();
+    DataOutputStream experienceData = new DataOutputStream(experience);
+    experienceData.writeFloat(0.5f);
+    JavaWireCodec.writeVarInt(experience, 3);
+    JavaWireCodec.writeVarInt(experience, 42);
+    JavaWirePacket.SetExperience decodedExperience =
+        (JavaWirePacket.SetExperience)
+            JavaWireCodec.decode(JavaWireState.PLAY, 0x5C, experience.toByteArray());
+    assertEquals(3, decodedExperience.level());
+    assertEquals(42, decodedExperience.totalExperience());
+
+    ByteArrayOutputStream health = new ByteArrayOutputStream();
+    DataOutputStream healthData = new DataOutputStream(health);
+    healthData.writeFloat(20.0f);
+    JavaWireCodec.writeVarInt(health, 20);
+    healthData.writeFloat(5.0f);
+    JavaWirePacket.SetHealth decodedHealth =
+        (JavaWirePacket.SetHealth)
+            JavaWireCodec.decode(JavaWireState.PLAY, 0x5D, health.toByteArray());
+    assertEquals(20, decodedHealth.food());
+    assertEquals(5.0f, decodedHealth.saturation());
+  }
+
+  @Test
   void decodesRecipeBookCommandsAndOpaqueRecipesBoundedly() throws Exception {
     ByteArrayOutputStream recipeBook = new ByteArrayOutputStream();
     JavaWireCodec.writeVarInt(recipeBook, 0);

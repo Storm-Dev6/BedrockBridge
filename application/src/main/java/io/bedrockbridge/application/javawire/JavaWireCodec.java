@@ -284,6 +284,7 @@ public final class JavaWireCodec {
         switch (id) {
           case 0x00 -> new JavaWirePacket.BundleDelimiter();
           case 0x01 -> decodeSpawnEntity(in);
+          case 0x09 -> decodeBlockUpdate(in);
           case 0x2B -> decodePlayLogin(in);
           case 0x0B -> {
             int difficulty = in.readUnsignedByte();
@@ -314,6 +315,8 @@ public final class JavaWireCodec {
           case 0x27 -> decodeChunkData(in);
           case 0x2A -> decodeLightUpdate(in);
           case 0x41 -> decodeUpdateRecipeBook(in);
+          case 0x42 -> decodeRemoveEntities(in);
+          case 0x49 -> decodeSectionBlocksUpdate(in);
           case 0x6C ->
               new JavaWirePacket.SystemChat(
                   JavaNbtCodec.read(in), readBoolean(in, "system chat overlay"));
@@ -334,6 +337,14 @@ public final class JavaWireCodec {
             yield new JavaWirePacket.SetChunkCacheRadius(distance);
           }
           case 0x56 -> new JavaWirePacket.SetDefaultSpawnPosition(readPosition(in), in.readFloat());
+          case 0x58 -> {
+            int payloadBytes = in.available();
+            if (payloadBytes > MAX_PACKET_BYTES) {
+              throw new JavaWireException("entity metadata payload exceeds packet limit");
+            }
+            in.skipBytes(payloadBytes);
+            yield new JavaWirePacket.EntityMetadataIgnored(payloadBytes);
+          }
           case 0x53 -> {
             int slot = in.readUnsignedByte();
             if (slot > 8) {
@@ -341,6 +352,8 @@ public final class JavaWireCodec {
             }
             yield new JavaWirePacket.SetCarriedItem(slot);
           }
+          case 0x5C -> decodeSetExperience(in);
+          case 0x5D -> decodeSetHealth(in);
           case 0x4B -> {
             JavaNbt motd = JavaNbtCodec.read(in);
             int iconBytes = 0;
@@ -365,6 +378,7 @@ public final class JavaWireCodec {
           case 0x64 -> new JavaWirePacket.SetTime(in.readLong(), in.readLong());
           case 0x75 -> decodeUpdateAttributes(in);
           case 0x76 -> decodeEntityEffect(in);
+          case 0x70 -> decodeTeleportEntity(in);
           default ->
               throw new JavaWireException(
                   "unsupported play packet id=0x" + Integer.toHexString(id));
@@ -827,6 +841,88 @@ public final class JavaWireCodec {
         velocityZ);
   }
 
+  private static JavaWirePacket.TeleportEntity decodeTeleportEntity(DataInputStream in)
+      throws IOException, JavaWireException {
+    int entityId = readVarInt(in);
+    double x = in.readDouble();
+    double y = in.readDouble();
+    double z = in.readDouble();
+    if (!Double.isFinite(x) || !Double.isFinite(y) || !Double.isFinite(z)) {
+      throw new JavaWireException("unsupported play packet id=0x70: non-finite entity position");
+    }
+    int yaw = in.readUnsignedByte();
+    int pitch = in.readUnsignedByte();
+    boolean onGround = readBoolean(in, "teleport on ground");
+    return new JavaWirePacket.TeleportEntity(entityId, x, y, z, yaw, pitch, onGround);
+  }
+
+  private static JavaWirePacket.BlockUpdate decodeBlockUpdate(DataInputStream in)
+      throws IOException, JavaWireException {
+    JavaWirePacket.BlockPosition location = readPosition(in);
+    int blockStateId = readVarInt(in);
+    if (blockStateId < 0) {
+      throw new JavaWireException("unsupported play packet id=0x09: invalid block state id");
+    }
+    return new JavaWirePacket.BlockUpdate(location, blockStateId);
+  }
+
+  private static JavaWirePacket.RemoveEntities decodeRemoveEntities(DataInputStream in)
+      throws IOException, JavaWireException {
+    int count = boundedCount(readVarInt(in), "removed entity");
+    List<Integer> entityIds = new ArrayList<>(count);
+    for (int index = 0; index < count; index++) {
+      entityIds.add(readVarInt(in));
+    }
+    return new JavaWirePacket.RemoveEntities(entityIds);
+  }
+
+  private static JavaWirePacket.SetExperience decodeSetExperience(DataInputStream in)
+      throws IOException, JavaWireException {
+    float progress = in.readFloat();
+    if (!Float.isFinite(progress) || progress < 0.0f || progress > 1.0f) {
+      throw new JavaWireException("unsupported play packet id=0x5c: invalid experience progress");
+    }
+    int level = readVarInt(in);
+    int totalExperience = readVarInt(in);
+    if (level < 0 || totalExperience < 0) {
+      throw new JavaWireException("unsupported play packet id=0x5c: negative experience value");
+    }
+    return new JavaWirePacket.SetExperience(progress, level, totalExperience);
+  }
+
+  private static JavaWirePacket.SetHealth decodeSetHealth(DataInputStream in)
+      throws IOException, JavaWireException {
+    float health = in.readFloat();
+    if (!Float.isFinite(health) || health < 0.0f) {
+      throw new JavaWireException("unsupported play packet id=0x5d: invalid health");
+    }
+    int food = readVarInt(in);
+    if (food < 0 || food > 20) {
+      throw new JavaWireException("unsupported play packet id=0x5d: invalid food");
+    }
+    float saturation = in.readFloat();
+    if (!Float.isFinite(saturation) || saturation < 0.0f) {
+      throw new JavaWireException("unsupported play packet id=0x5d: invalid saturation");
+    }
+    return new JavaWirePacket.SetHealth(health, food, saturation);
+  }
+
+  private static JavaWirePacket.SectionBlocksUpdate decodeSectionBlocksUpdate(DataInputStream in)
+      throws IOException, JavaWireException {
+    long sectionPosition = in.readLong();
+    int count = boundedCount(readVarInt(in), "section block update");
+    List<Long> blocks = new ArrayList<>(count);
+    for (int index = 0; index < count; index++) {
+      long encoded = readVarLong(in);
+      if (encoded < 0) {
+        throw new JavaWireException(
+            "unsupported play packet id=0x49: negative encoded block update");
+      }
+      blocks.add(encoded);
+    }
+    return new JavaWirePacket.SectionBlocksUpdate(sectionPosition, blocks);
+  }
+
   private static JavaWirePacket.EntityEffect decodeEntityEffect(DataInputStream in)
       throws IOException, JavaWireException {
     int entityId = readVarInt(in);
@@ -920,6 +1016,26 @@ public final class JavaWireCodec {
         throw new JavaWireException("VarInt exceeds five bytes");
       }
     }
+  }
+
+  private static long readVarLong(InputStream in) throws IOException, JavaWireException {
+    long value = 0;
+    int position = 0;
+    for (int index = 0; index < 10; index++) {
+      int next = in.read();
+      if (next < 0) {
+        throw new EOFException("truncated VarLong");
+      }
+      if (index == 9 && (next & 0xFE) != 0) {
+        throw new JavaWireException("VarLong exceeds ten bytes");
+      }
+      value |= (long) (next & 0x7F) << position;
+      if ((next & 0x80) == 0) {
+        return value;
+      }
+      position += 7;
+    }
+    throw new JavaWireException("VarLong exceeds ten bytes");
   }
 
   private static void writeString(OutputStream out, String value, int maxChars)

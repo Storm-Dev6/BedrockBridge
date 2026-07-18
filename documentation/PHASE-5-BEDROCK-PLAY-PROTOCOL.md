@@ -354,11 +354,14 @@ heightmaps, block entities, palettes, and light masks; Update Light (`0x2A`) val
 coordinates, UUID, entity type, angles, data, and velocity fields. Update Attributes (`0x75`)
 validates the documented attribute IDs, finite doubles, modifier identifiers, and operation range;
 Entity Effect (`0x76`) validates effect, amplifier, duration, and flags. An extended Paper trace
-reached chunk/light packets and these entity packets; the first remaining unsupported packet was
-Set Entity Metadata (`0x58`). Its metadata type/value schema is registry-dependent and is therefore
-kept fail-closed until the versioned external registry is supplied. Unsupported PLAY packets fail
-closed with the exact hexadecimal packet ID, while the trace utility records packet order without
-decoding unknown payloads. StartGame construction on Bedrock remains fail-closed on
+reached chunk/light packets and these entity packets. Section Blocks Update (`0x49`), Block Update
+(`0x09`), Remove Entities (`0x42`), Set Experience (`0x5C`), and Set Health (`0x5D`) are also
+decoded with numeric bounds. Entity Metadata (`0x58`) is retained only as a bounded opaque frame;
+its metadata type/value schema is not interpreted and therefore cannot yet be translated to
+Bedrock. The first remaining semantic boundary in the extended Paper trace is Update Advancements
+(`0x74`), whose advancement display/icon Slot structures require versioned item and registry data.
+Unsupported or semantically dependent PLAY packets fail closed with the exact hexadecimal packet ID,
+while the trace utility records packet order without decoding unknown payloads. StartGame construction on Bedrock remains fail-closed on
 `BLOCKED_EXTERNAL_OFFICIAL_ARTIFACT`.
 
 The synthetic socket harness proves PLAY packet ordering and the keep-alive/position response
