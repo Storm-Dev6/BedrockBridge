@@ -18,7 +18,9 @@ class JavaRealServerManualTest {
       JavaWirePacket.LoginSuccess success = connection.loginOffline(host, port, "BedrockBridge");
       assertEquals("BedrockBridge", success.username());
       assertEquals(JavaWireState.PLAY, connection.state());
-      JavaTcpConnection.PlayTrace trace = connection.capturePlayPacketIdsForTrace(10);
+      int traceLimit =
+          Integer.parseInt(System.getenv().getOrDefault("BEDROCKBRIDGE_TRACE_LIMIT", "10"));
+      JavaTcpConnection.PlayTrace trace = connection.capturePlayPacketIdsForTrace(traceLimit);
       assertFalse(trace.packetIds().isEmpty());
       System.out.println(
           "Paper PLAY trace ids="

@@ -43,7 +43,15 @@ public sealed interface JavaWirePacket
         JavaWirePacket.ChangeDifficulty,
         JavaWirePacket.EntityEvent,
         JavaWirePacket.SetCarriedItem,
-        JavaWirePacket.ServerData {
+        JavaWirePacket.ServerData,
+        JavaWirePacket.UpdateRecipeBook,
+        JavaWirePacket.UpdateRecipesIgnored,
+        JavaWirePacket.Commands,
+        JavaWirePacket.ChunkData,
+        JavaWirePacket.LightUpdate,
+        JavaWirePacket.SetChunkCacheRadius,
+        JavaWirePacket.SetSimulationDistance,
+        JavaWirePacket.SetTime {
   record Handshake(int protocolVersion, String host, int port, int nextState)
       implements JavaWirePacket {}
 
@@ -216,4 +224,110 @@ public sealed interface JavaWirePacket
   record SetCarriedItem(int slot) implements JavaWirePacket {}
 
   record ServerData(JavaNbt motd, int iconBytes) implements JavaWirePacket {}
+
+  record UpdateRecipeBook(
+      int action,
+      boolean craftingOpen,
+      boolean craftingFilter,
+      boolean smeltingOpen,
+      boolean smeltingFilter,
+      boolean blastFurnaceOpen,
+      boolean blastFurnaceFilter,
+      boolean smokerOpen,
+      boolean smokerFilter,
+      java.util.List<String> displayedRecipes,
+      java.util.List<String> addedRecipes)
+      implements JavaWirePacket {
+    public UpdateRecipeBook {
+      displayedRecipes = java.util.List.copyOf(displayedRecipes);
+      addedRecipes = java.util.List.copyOf(addedRecipes);
+    }
+  }
+
+  /** Bounded opaque handling for recipe definitions that are not needed for spawning. */
+  record UpdateRecipesIgnored(int payloadBytes) implements JavaWirePacket {}
+
+  record Commands(int rootIndex, java.util.List<CommandNode> nodes) implements JavaWirePacket {
+    public Commands {
+      nodes = java.util.List.copyOf(nodes);
+    }
+  }
+
+  record CommandNode(
+      int flags,
+      java.util.List<Integer> children,
+      Integer redirect,
+      String name,
+      Integer parserId,
+      String parserProperties,
+      String suggestionsType) {
+    public CommandNode {
+      children = java.util.List.copyOf(children);
+    }
+  }
+
+  record ChunkData(
+      int chunkX,
+      int chunkZ,
+      JavaNbt heightmaps,
+      java.util.List<ChunkSection> sections,
+      java.util.List<BlockEntity> blockEntities,
+      LightData light)
+      implements JavaWirePacket {
+    public ChunkData {
+      sections = java.util.List.copyOf(sections);
+      blockEntities = java.util.List.copyOf(blockEntities);
+    }
+  }
+
+  record ChunkSection(short blockCount, PaletteReference blockStates, PaletteReference biomes) {}
+
+  record PaletteReference(
+      int bitsPerEntry, java.util.List<Integer> paletteIds, java.util.List<Long> data) {
+    public PaletteReference {
+      paletteIds = java.util.List.copyOf(paletteIds);
+      data = java.util.List.copyOf(data);
+    }
+  }
+
+  record BlockEntity(int packedXz, short y, int type, JavaNbt data) {}
+
+  record LightUpdate(int chunkX, int chunkZ, LightData light) implements JavaWirePacket {}
+
+  record SetChunkCacheRadius(int viewDistance) implements JavaWirePacket {}
+
+  record SetSimulationDistance(int simulationDistance) implements JavaWirePacket {}
+
+  record SetTime(long worldAge, long timeOfDay) implements JavaWirePacket {}
+
+  record LightData(
+      java.util.List<Long> skyMask,
+      java.util.List<Long> blockMask,
+      java.util.List<Long> emptySkyMask,
+      java.util.List<Long> emptyBlockMask,
+      java.util.List<byte[]> skyArrays,
+      java.util.List<byte[]> blockArrays) {
+    public LightData {
+      skyMask = java.util.List.copyOf(skyMask);
+      blockMask = java.util.List.copyOf(blockMask);
+      emptySkyMask = java.util.List.copyOf(emptySkyMask);
+      emptyBlockMask = java.util.List.copyOf(emptyBlockMask);
+      skyArrays = copyArrays(skyArrays);
+      blockArrays = copyArrays(blockArrays);
+    }
+
+    @Override
+    public java.util.List<byte[]> skyArrays() {
+      return copyArrays(skyArrays);
+    }
+
+    @Override
+    public java.util.List<byte[]> blockArrays() {
+      return copyArrays(blockArrays);
+    }
+
+    private static java.util.List<byte[]> copyArrays(java.util.List<byte[]> arrays) {
+      return arrays.stream().map(byte[]::clone).toList();
+    }
+  }
 }

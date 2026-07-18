@@ -9,7 +9,7 @@ import io.bedrockbridge.config.BridgeConfiguration;
 import io.bedrockbridge.config.DefaultConfigurationValidator;
 import io.bedrockbridge.config.PropertiesConfigurationLoader;
 import io.bedrockbridge.observability.BridgeMetrics;
-import io.bedrockbridge.registry.generator.VersionedExternalItemRegistryLoader;
+import io.bedrockbridge.registry.generator.RegistryCheckCli;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.nio.file.Path;
@@ -48,8 +48,7 @@ public final class BridgeLauncher {
               + "bridge.registry-protocol-version, and bridge.registry-sha256 before startup");
     }
     try {
-      new VersionedExternalItemRegistryLoader()
-          .load(
+      RegistryCheckCli.validate(
               Path.of(configuration.registryPath()),
               configuration.registryProtocolVersion(),
               configuration.registrySha256());

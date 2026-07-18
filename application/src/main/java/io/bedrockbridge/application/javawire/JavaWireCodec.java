@@ -308,10 +308,29 @@ public final class JavaWireCodec {
                   in.readFloat(),
                   in.readUnsignedByte(),
                   readVarInt(in));
+          case 0x11 -> decodeCommands(in);
+          case 0x27 -> decodeChunkData(in);
+          case 0x2A -> decodeLightUpdate(in);
+          case 0x41 -> decodeUpdateRecipeBook(in);
           case 0x6C ->
               new JavaWirePacket.SystemChat(
                   JavaNbtCodec.read(in), readBoolean(in, "system chat overlay"));
+          case 0x77 -> {
+            int payloadBytes = in.available();
+            if (payloadBytes > MAX_PACKET_BYTES) {
+              throw new JavaWireException("update recipes payload exceeds packet limit");
+            }
+            in.skipBytes(payloadBytes);
+            yield new JavaWirePacket.UpdateRecipesIgnored(payloadBytes);
+          }
           case 0x54 -> new JavaWirePacket.SetChunkCacheCenter(readVarInt(in), readVarInt(in));
+          case 0x55 -> {
+            int distance = readVarInt(in);
+            if (distance < 2 || distance > 32) {
+              throw new JavaWireException("invalid chunk cache radius=" + distance);
+            }
+            yield new JavaWirePacket.SetChunkCacheRadius(distance);
+          }
           case 0x56 -> new JavaWirePacket.SetDefaultSpawnPosition(readPosition(in), in.readFloat());
           case 0x53 -> {
             int slot = in.readUnsignedByte();
@@ -334,6 +353,14 @@ public final class JavaWireCodec {
             }
             yield new JavaWirePacket.ServerData(motd, iconBytes);
           }
+          case 0x62 -> {
+            int distance = readVarInt(in);
+            if (distance < 2 || distance > 32) {
+              throw new JavaWireException("invalid simulation distance=" + distance);
+            }
+            yield new JavaWirePacket.SetSimulationDistance(distance);
+          }
+          case 0x64 -> new JavaWirePacket.SetTime(in.readLong(), in.readLong());
           default ->
               throw new JavaWireException(
                   "unsupported play packet id=0x" + Integer.toHexString(id));
@@ -423,6 +450,312 @@ public final class JavaWireCodec {
         deathLocation,
         portalCooldown,
         secureChat);
+  }
+
+  private static JavaWirePacket.UpdateRecipeBook decodeUpdateRecipeBook(DataInputStream in)
+      throws IOException, JavaWireException {
+    int action = readVarInt(in);
+    if (action < 0 || action > 2) {
+      throw new JavaWireException(
+          "unsupported play packet id=0x41: invalid recipe action=" + action);
+    }
+    boolean craftingOpen = readBoolean(in, "crafting recipe book open");
+    boolean craftingFilter = readBoolean(in, "crafting recipe book filter");
+    boolean smeltingOpen = readBoolean(in, "smelting recipe book open");
+    boolean smeltingFilter = readBoolean(in, "smelting recipe book filter");
+    boolean blastOpen = readBoolean(in, "blast furnace recipe book open");
+    boolean blastFilter = readBoolean(in, "blast furnace recipe book filter");
+    boolean smokerOpen = readBoolean(in, "smoker recipe book open");
+    boolean smokerFilter = readBoolean(in, "smoker recipe book filter");
+    List<String> displayed = readIdentifierList(in, 0x41, "displayed recipe");
+    List<String> added = action == 0 ? readIdentifierList(in, 0x41, "added recipe") : List.of();
+    return new JavaWirePacket.UpdateRecipeBook(
+        action,
+        craftingOpen,
+        craftingFilter,
+        smeltingOpen,
+        smeltingFilter,
+        blastOpen,
+        blastFilter,
+        smokerOpen,
+        smokerFilter,
+        displayed,
+        added);
+  }
+
+  private static JavaWirePacket.Commands decodeCommands(DataInputStream in)
+      throws IOException, JavaWireException {
+    int count = boundedCount(readVarInt(in), "command node");
+    List<JavaWirePacket.CommandNode> nodes = new ArrayList<>();
+    for (int index = 0; index < count; index++) {
+      int flags = in.readUnsignedByte();
+      int nodeType = flags & 0x03;
+      if (nodeType == 3) {
+        throw new JavaWireException("unsupported play packet id=0x11: invalid command node type");
+      }
+      int childCount = boundedCount(readVarInt(in), "command child");
+      List<Integer> children = new ArrayList<>(childCount);
+      for (int child = 0; child < childCount; child++) {
+        int childIndex = readVarInt(in);
+        if (childIndex < 0 || childIndex >= index) {
+          throw new JavaWireException(
+              "unsupported play packet id=0x11: forward command child=" + childIndex);
+        }
+        children.add(childIndex);
+      }
+      Integer redirect = null;
+      if ((flags & 0x08) != 0) {
+        redirect = readVarInt(in);
+        if (redirect < 0 || redirect >= index) {
+          throw new JavaWireException(
+              "unsupported play packet id=0x11: invalid command redirect=" + redirect);
+        }
+      }
+      String name = nodeType == 0 ? null : readString(in, 32767);
+      Integer parserId = null;
+      String parserProperties = null;
+      if (nodeType == 2) {
+        parserId = readVarInt(in);
+        if (parserId < 0 || parserId > 49) {
+          throw new JavaWireException(
+              "unsupported play packet id=0x11: unknown command parser=" + parserId);
+        }
+        parserProperties = readCommandParserProperties(in, parserId);
+      }
+      String suggestionsType =
+          (flags & 0x10) != 0 ? readIdentifier(in, 0x11, "command suggestions") : null;
+      nodes.add(
+          new JavaWirePacket.CommandNode(
+              flags, children, redirect, name, parserId, parserProperties, suggestionsType));
+    }
+    int rootIndex = readVarInt(in);
+    if (rootIndex < 0 || rootIndex >= count) {
+      throw new JavaWireException(
+          "unsupported play packet id=0x11: invalid root index=" + rootIndex);
+    }
+    return new JavaWirePacket.Commands(rootIndex, nodes);
+  }
+
+  private static String readCommandParserProperties(DataInputStream in, int parserId)
+      throws IOException, JavaWireException {
+    return switch (parserId) {
+      case 1, 2, 3, 4 -> {
+        int flags = in.readUnsignedByte();
+        if ((flags & ~0x03) != 0) {
+          throw new JavaWireException("unsupported play packet id=0x11: invalid parser bounds");
+        }
+        StringBuilder values = new StringBuilder("flags=").append(flags);
+        if ((flags & 0x01) != 0) {
+          values.append(",min=").append(readParserNumber(in, parserId));
+        }
+        if ((flags & 0x02) != 0) {
+          values.append(",max=").append(readParserNumber(in, parserId));
+        }
+        yield values.toString();
+      }
+      case 5 -> {
+        int behavior = readVarInt(in);
+        if (behavior < 0 || behavior > 2) {
+          throw new JavaWireException(
+              "unsupported play packet id=0x11: invalid string parser behavior");
+        }
+        yield "behavior=" + behavior;
+      }
+      case 6, 30 -> "flags=" + in.readUnsignedByte();
+      case 41 -> "min=" + in.readInt();
+      case 42, 43, 44, 45 -> "registry=" + readIdentifier(in, 0x11, "command parser registry");
+      default -> null;
+    };
+  }
+
+  private static String readParserNumber(DataInputStream in, int parserId) throws IOException {
+    return switch (parserId) {
+      case 1 -> Float.toString(in.readFloat());
+      case 2 -> Double.toString(in.readDouble());
+      case 3 -> Integer.toString(in.readInt());
+      case 4 -> Long.toString(in.readLong());
+      default -> throw new AssertionError("unexpected parser=" + parserId);
+    };
+  }
+
+  private static JavaWirePacket.ChunkData decodeChunkData(DataInputStream in)
+      throws IOException, JavaWireException {
+    int chunkX = in.readInt();
+    int chunkZ = in.readInt();
+    JavaNbt heightmaps = JavaNbtCodec.read(in);
+    int dataSize = boundedByteLength(readVarInt(in), "chunk section data");
+    byte[] sectionBytes = in.readNBytes(dataSize);
+    if (sectionBytes.length != dataSize) {
+      throw new EOFException("truncated chunk section data");
+    }
+    List<JavaWirePacket.ChunkSection> sections = decodeChunkSections(sectionBytes);
+    int entityCount = boundedCount(readVarInt(in), "block entity");
+    List<JavaWirePacket.BlockEntity> blockEntities = new ArrayList<>(entityCount);
+    for (int index = 0; index < entityCount; index++) {
+      blockEntities.add(
+          new JavaWirePacket.BlockEntity(
+              in.readUnsignedByte(), in.readShort(), readVarInt(in), JavaNbtCodec.read(in)));
+    }
+    return new JavaWirePacket.ChunkData(
+        chunkX, chunkZ, heightmaps, sections, blockEntities, readLightData(in, 0x27));
+  }
+
+  private static JavaWirePacket.LightUpdate decodeLightUpdate(DataInputStream in)
+      throws IOException, JavaWireException {
+    return new JavaWirePacket.LightUpdate(readVarInt(in), readVarInt(in), readLightData(in, 0x2A));
+  }
+
+  private static List<JavaWirePacket.ChunkSection> decodeChunkSections(byte[] bytes)
+      throws IOException, JavaWireException {
+    List<JavaWirePacket.ChunkSection> match = null;
+    boolean ambiguous = false;
+    for (int count = 0; count <= 64; count++) {
+      try {
+        DataInputStream candidate = new DataInputStream(new ByteArrayInputStream(bytes));
+        List<JavaWirePacket.ChunkSection> sections = new ArrayList<>(count);
+        for (int index = 0; index < count; index++) {
+          int blockCount = candidate.readShort();
+          if (blockCount < 0 || blockCount > 4096) {
+            throw new JavaWireException("invalid chunk section block count");
+          }
+          sections.add(
+              new JavaWirePacket.ChunkSection(
+                  (short) blockCount, readPalette(candidate, true), readPalette(candidate, false)));
+        }
+        if (candidate.available() == 0) {
+          if (match != null) {
+            ambiguous = true;
+            break;
+          }
+          match = sections;
+        }
+      } catch (EOFException | JavaWireException ignored) {
+        // Try the next bounded section count; malformed or ambiguous data fails below.
+      }
+    }
+    if (ambiguous) {
+      throw new JavaWireException("unsupported play packet id=0x27: ambiguous section count");
+    }
+    if (match == null) {
+      throw new JavaWireException("unsupported play packet id=0x27: invalid chunk section data");
+    }
+    return match;
+  }
+
+  private static JavaWirePacket.PaletteReference readPalette(DataInputStream in, boolean blocks)
+      throws IOException, JavaWireException {
+    int bits = in.readUnsignedByte();
+    if (blocks ? (bits > 31 || (bits > 0 && bits < 4)) : (bits > 31 || (bits > 0 && bits < 1))) {
+      throw new JavaWireException("invalid chunk palette bits=" + bits);
+    }
+    List<Integer> palette = new ArrayList<>();
+    if (bits == 0) {
+      palette.add(readVarInt(in));
+    } else if (blocks ? bits <= 8 : bits <= 3) {
+      int paletteCount = boundedCount(readVarInt(in), "chunk palette");
+      if (paletteCount == 0 || (blocks && paletteCount > 4096) || (!blocks && paletteCount > 64)) {
+        throw new JavaWireException("invalid chunk palette size=" + paletteCount);
+      }
+      for (int index = 0; index < paletteCount; index++) {
+        palette.add(readVarInt(in));
+      }
+    }
+    int dataCount = boundedCount(readVarInt(in), "chunk palette data");
+    if (dataCount > 65_536) {
+      throw new JavaWireException("chunk palette data exceeds limit");
+    }
+    List<Long> data = new ArrayList<>(dataCount);
+    for (int index = 0; index < dataCount; index++) {
+      data.add(in.readLong());
+    }
+    return new JavaWirePacket.PaletteReference(bits, palette, data);
+  }
+
+  private static JavaWirePacket.LightData readLightData(DataInputStream in, int packetId)
+      throws IOException, JavaWireException {
+    List<Long> skyMask = readMask(in, packetId, "sky");
+    List<Long> blockMask = readMask(in, packetId, "block");
+    List<Long> emptySkyMask = readMask(in, packetId, "empty sky");
+    List<Long> emptyBlockMask = readMask(in, packetId, "empty block");
+    List<byte[]> skyArrays = readLightArrays(in, packetId, "sky", skyMask);
+    List<byte[]> blockArrays = readLightArrays(in, packetId, "block", blockMask);
+    return new JavaWirePacket.LightData(
+        skyMask, blockMask, emptySkyMask, emptyBlockMask, skyArrays, blockArrays);
+  }
+
+  private static List<Long> readMask(DataInputStream in, int packetId, String label)
+      throws IOException, JavaWireException {
+    int count = boundedCount(readVarInt(in), label + " light mask long");
+    if (count > 66) {
+      throw new JavaWireException(
+          "unsupported play packet id=0x"
+              + Integer.toHexString(packetId)
+              + ": "
+              + label
+              + " light mask too large");
+    }
+    List<Long> mask = new ArrayList<>(count);
+    for (int index = 0; index < count; index++) {
+      mask.add(in.readLong());
+    }
+    return mask;
+  }
+
+  private static List<byte[]> readLightArrays(
+      DataInputStream in, int packetId, String label, List<Long> mask)
+      throws IOException, JavaWireException {
+    int expected = 0;
+    for (long value : mask) {
+      expected += Long.bitCount(value);
+    }
+    int count = boundedCount(readVarInt(in), label + " light array");
+    if (count != expected) {
+      throw new JavaWireException(
+          "unsupported play packet id=0x"
+              + Integer.toHexString(packetId)
+              + ": "
+              + label
+              + " light array count="
+              + count
+              + " expected="
+              + expected);
+    }
+    List<byte[]> arrays = new ArrayList<>(count);
+    for (int index = 0; index < count; index++) {
+      int length = readVarInt(in);
+      if (length != 2048) {
+        throw new JavaWireException(
+            "unsupported play packet id=0x"
+                + Integer.toHexString(packetId)
+                + ": invalid "
+                + label
+                + " light length="
+                + length);
+      }
+      byte[] bytes = in.readNBytes(length);
+      if (bytes.length != length) {
+        throw new EOFException("truncated " + label + " light array");
+      }
+      arrays.add(bytes);
+    }
+    return arrays;
+  }
+
+  private static List<String> readIdentifierList(DataInputStream in, int packetId, String label)
+      throws IOException, JavaWireException {
+    int count = boundedCount(readVarInt(in), label);
+    List<String> values = new ArrayList<>(count);
+    for (int index = 0; index < count; index++) {
+      values.add(readIdentifier(in, packetId, label));
+    }
+    return values;
+  }
+
+  private static int boundedByteLength(int length, String label) throws JavaWireException {
+    if (length < 0 || length > MAX_PACKET_BYTES) {
+      throw new JavaWireException("invalid " + label + " length=" + length);
+    }
+    return length;
   }
 
   private static JavaWirePacket.BlockPosition readPosition(DataInputStream in) throws IOException {

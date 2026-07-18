@@ -319,12 +319,14 @@ game mode, previous game mode, portal cooldown, and optional death location. Tru
 ranges, malformed identifiers, and trailing bytes fail closed with the packet ID and reason. Field
 definitions are taken from the public [protocol 767 reference](https://wikivg.booky.dev/Protocol).
 
-`JavaWorldState` records the decoded login, default spawn, chunk-cache center, chunk-batch lifecycle,
-and known chunk coordinates. It does not synthesize block, biome, heightmap, light, or entity data.
+`JavaWorldState` records the decoded login, default spawn, chunk-cache center/radius, simulation
+distance, time, chunk-batch lifecycle, bounded chunk columns, light updates, and known chunk
+coordinates. It does not synthesize block, biome, heightmap, light, or entity data.
 The first verified world-state packets are Set Chunk Cache Center (`0x54`), Set Default Spawn
 Position (`0x56`), Change Difficulty (`0x0B`), Entity Event (`0x1F`), Set Carried Item (`0x53`),
-and Server Data (`0x4B`, retaining only icon byte count and never icon bytes). Chunk payload decoding
-remains a separate bounded boundary.
+and Server Data (`0x4B`, retaining only icon byte count and never icon bytes). The bounded Chunk Data
+and Update Light codecs are available as `0x27` and `0x2A`; section palettes are retained as
+registry-ID references and block-entity NBT is bounded.
 
 ### First remaining protocol boundary
 
@@ -336,16 +338,22 @@ first ten clientbound PLAY packet IDs is:
 In packet names, this is Play Login, Change Difficulty, Player Abilities, Set Carried Item,
 Update Recipes, Entity Event, Update Recipe Book, Synchronize Player Position, Server Data, and
 System Chat. The trace is from the local Paper `paper-1.21.1-133.jar` server (protocol 767,
-`online-mode=false`), and the first unsupported packet observed was `0x41` Update Recipe Book.
+`online-mode=false`). The official protocol assigns Commands to `0x11` and Synchronize Player
+Position to `0x40`; there is no separate `0x40` Recipe packet in protocol 767.
 
 The codec handles the bounded Play Login and the known keep-alive (`0x26`), disconnect (`0x1D`),
 game event (`0x22`), player abilities (`0x38`), synchronize-player-position (`0x40`), system chat
 (`0x6C` anonymous NBT component), world-state packets listed above, and chunk batch lifecycle
 (`0x0C`/`0x0D`). A position update is answered with Confirm Teleportation (`0x00`), and keep-alives
-are echoed with the serverbound PLAY ID (`0x18`). The first unsupported Paper packet is Update
-Recipe Book (`0x41`); its recipe-book payload is intentionally not guessed. Unsupported PLAY
-packets fail closed with the exact hexadecimal packet ID, while the trace utility records packet
-order without decoding unknown payloads. StartGame construction on Bedrock remains fail-closed on
+are echoed with the serverbound PLAY ID (`0x18`). Update Recipe Book (`0x41`) is decoded into its
+bounded state and recipe identifiers, Commands (`0x11`) validates the directed graph and known
+parser properties, and Update Recipes (`0x77`) is consumed only as a bounded opaque packet because
+full recipe/item component semantics are outside this slice. Chunk Data (`0x27`) parses sections,
+heightmaps, block entities, palettes, and light masks; Update Light (`0x2A`) validates masks and
+2048-byte arrays. An extended Paper trace reached chunk/light packets; the first remaining
+unsupported packet was Update Attributes (`0x75`). Unsupported PLAY packets fail closed with the
+exact hexadecimal packet ID, while the trace utility records packet order without decoding unknown
+payloads. StartGame construction on Bedrock remains fail-closed on
 `BLOCKED_EXTERNAL_OFFICIAL_ARTIFACT`.
 
 The synthetic socket harness proves PLAY packet ordering and the keep-alive/position response
@@ -374,6 +382,7 @@ For manual reproduction, temporarily set `online-mode=false` in the local Java s
 
 ```text
 $env:BEDROCKBRIDGE_REAL_JAVA='true'
+$env:BEDROCKBRIDGE_TRACE_LIMIT='10'
 ./gradlew.bat --no-daemon :application:test --tests io.bedrockbridge.application.javawire.JavaRealServerManualTest
 ```
 
@@ -421,4 +430,6 @@ The artifact must remain outside the Git work-tree. Validate it offline with the
 ```
 
 The command prints protocol, artifact SHA-256, byte count, item count, `duplicates`, and
-`missing-required` fields. It never downloads BDS or stores the artifact in Gradle/CI outputs.
+`missing-required` fields. `BridgeLauncher` invokes the same `RegistryCheckCli.validate` preflight
+before admitting a session or allowing the StartGame path. It never downloads BDS or stores the
+artifact in Gradle/CI outputs.

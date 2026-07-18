@@ -223,6 +223,91 @@ class JavaWireCodecTest {
     assertEquals(new JavaWirePacket.BlockPosition(8, 64, 8), world.defaultSpawn());
   }
 
+  @Test
+  void decodesRecipeBookCommandsAndOpaqueRecipesBoundedly() throws Exception {
+    ByteArrayOutputStream recipeBook = new ByteArrayOutputStream();
+    JavaWireCodec.writeVarInt(recipeBook, 0);
+    recipeBook.write(new byte[] {1, 0, 0, 0, 0, 0, 0, 0});
+    JavaWireCodec.writeVarInt(recipeBook, 1);
+    writeString(recipeBook, "minecraft:crafting");
+    JavaWireCodec.writeVarInt(recipeBook, 1);
+    writeString(recipeBook, "minecraft:smelting");
+    JavaWirePacket.UpdateRecipeBook decodedBook =
+        (JavaWirePacket.UpdateRecipeBook)
+            JavaWireCodec.decode(JavaWireState.PLAY, 0x41, recipeBook.toByteArray());
+    assertEquals(1, decodedBook.displayedRecipes().size());
+    assertEquals(1, decodedBook.addedRecipes().size());
+
+    ByteArrayOutputStream commands = new ByteArrayOutputStream();
+    JavaWireCodec.writeVarInt(commands, 1);
+    commands.write(0);
+    JavaWireCodec.writeVarInt(commands, 0);
+    JavaWireCodec.writeVarInt(commands, 0);
+    JavaWirePacket.Commands decodedCommands =
+        (JavaWirePacket.Commands)
+            JavaWireCodec.decode(JavaWireState.PLAY, 0x11, commands.toByteArray());
+    assertEquals(0, decodedCommands.rootIndex());
+    assertEquals(1, decodedCommands.nodes().size());
+
+    JavaWirePacket.UpdateRecipesIgnored ignored =
+        (JavaWirePacket.UpdateRecipesIgnored)
+            JavaWireCodec.decode(JavaWireState.PLAY, 0x77, new byte[] {1, 2, 3});
+    assertEquals(3, ignored.payloadBytes());
+  }
+
+  @Test
+  void decodesMinimalChunkSectionsAndLightMasks() throws Exception {
+    ByteArrayOutputStream sectionBytes = new ByteArrayOutputStream();
+    DataOutputStream sectionData = new DataOutputStream(sectionBytes);
+    sectionData.writeShort(0);
+    sectionData.writeByte(0);
+    JavaWireCodec.writeVarInt(sectionBytes, 0);
+    JavaWireCodec.writeVarInt(sectionBytes, 0);
+    sectionData.writeByte(0);
+    JavaWireCodec.writeVarInt(sectionBytes, 0);
+    JavaWireCodec.writeVarInt(sectionBytes, 0);
+
+    ByteArrayOutputStream chunk = new ByteArrayOutputStream();
+    DataOutputStream chunkData = new DataOutputStream(chunk);
+    chunkData.writeInt(4);
+    chunkData.writeInt(-2);
+    chunkData.writeByte(0);
+    JavaWireCodec.writeVarInt(chunk, sectionBytes.size());
+    chunk.write(sectionBytes.toByteArray());
+    JavaWireCodec.writeVarInt(chunk, 0);
+    for (int mask = 0; mask < 4; mask++) {
+      JavaWireCodec.writeVarInt(chunk, 0);
+    }
+    JavaWireCodec.writeVarInt(chunk, 0);
+    JavaWireCodec.writeVarInt(chunk, 0);
+    JavaWirePacket.ChunkData decodedChunk =
+        (JavaWirePacket.ChunkData)
+            JavaWireCodec.decode(JavaWireState.PLAY, 0x27, chunk.toByteArray());
+    assertEquals(4, decodedChunk.chunkX());
+    assertEquals(-2, decodedChunk.chunkZ());
+    assertEquals(1, decodedChunk.sections().size());
+
+    ByteArrayOutputStream light = new ByteArrayOutputStream();
+    JavaWireCodec.writeVarInt(light, 4);
+    JavaWireCodec.writeVarInt(light, -2);
+    for (int mask = 0; mask < 4; mask++) {
+      JavaWireCodec.writeVarInt(light, 0);
+    }
+    JavaWireCodec.writeVarInt(light, 0);
+    JavaWireCodec.writeVarInt(light, 0);
+    JavaWirePacket.LightUpdate decodedLight =
+        (JavaWirePacket.LightUpdate)
+            JavaWireCodec.decode(JavaWireState.PLAY, 0x2A, light.toByteArray());
+    assertEquals(4, decodedLight.chunkX());
+    assertEquals(0, decodedLight.light().skyArrays().size());
+
+    JavaWorldState world = new JavaWorldState();
+    world.apply(decodedChunk);
+    world.apply(decodedLight);
+    assertEquals(1, world.chunks().size());
+    assertEquals(1, world.lightUpdates().size());
+  }
+
   private static void writeString(ByteArrayOutputStream output, String value) throws Exception {
     byte[] bytes = value.getBytes(UTF_8);
     JavaWireCodec.writeVarInt(output, bytes.length);

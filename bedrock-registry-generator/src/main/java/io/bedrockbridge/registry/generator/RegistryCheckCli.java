@@ -11,11 +11,10 @@ public final class RegistryCheckCli {
   public static void main(String[] args) throws Exception {
     Map<String, String> options = parseOptions(args);
     ExternalItemRegistry registry =
-        new VersionedExternalItemRegistryLoader()
-            .load(
-                Path.of(required(options, "--artifact")),
-                required(options, "--protocol"),
-                required(options, "--sha256"));
+        validate(
+            Path.of(required(options, "--artifact")),
+            required(options, "--protocol"),
+            required(options, "--sha256"));
     System.out.println(
         "registry-valid protocol="
             + registry.protocolVersion()
@@ -26,6 +25,12 @@ public final class RegistryCheckCli {
             + " sha256="
             + registry.sha256()
             + " duplicates=0 missing-required=0");
+  }
+
+  /** Performs the same preflight validation used by the application before StartGame. */
+  public static ExternalItemRegistry validate(Path artifact, String protocol, String sha256)
+      throws java.io.IOException {
+    return new VersionedExternalItemRegistryLoader().load(artifact, protocol, sha256);
   }
 
   private static Map<String, String> parseOptions(String[] args) {
