@@ -1,6 +1,7 @@
 plugins { id("bedrockbridge.application-conventions") }
 
 dependencies {
+    implementation(project(":common"))
     implementation(project(":bedrock-auth"))
     implementation(project(":bedrock-codec"))
 }

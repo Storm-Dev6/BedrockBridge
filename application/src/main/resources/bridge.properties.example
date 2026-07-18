@@ -6,3 +6,7 @@ bridge.upstream-port=25565
 bridge.maximum-sessions=100
 bridge.scheduler-threads=2
 bridge.development-mode=false
+bridge.registry-path=C:/Users/example/.bedrockbridge/item-registry-748.ndjson
+bridge.registry-protocol-version=748
+bridge.registry-sha256=replace-with-local-artifact-sha256
+bridge.offline-auth-mode=deny

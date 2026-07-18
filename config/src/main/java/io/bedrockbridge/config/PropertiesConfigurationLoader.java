@@ -30,7 +30,11 @@ public final class PropertiesConfigurationLoader implements ConfigurationLoader 
           integer(properties, "bridge.upstream-port"),
           integer(properties, "bridge.maximum-sessions"),
           integer(properties, "bridge.scheduler-threads"),
-          bool(properties, "bridge.development-mode"));
+          bool(properties, "bridge.development-mode"),
+          optional(properties, "bridge.registry-path"),
+          optional(properties, "bridge.registry-protocol-version"),
+          optional(properties, "bridge.registry-sha256"),
+          optionalOr(properties, "bridge.offline-auth-mode", "deny"));
     } catch (IllegalArgumentException failure) {
       throw new ConfigurationException("Invalid configuration: " + failure.getMessage(), failure);
     }
@@ -42,6 +46,16 @@ public final class PropertiesConfigurationLoader implements ConfigurationLoader 
       throw new IllegalArgumentException("Missing property " + key);
     }
     return value.trim();
+  }
+
+  private static String optional(Properties properties, String key) {
+    String value = properties.getProperty(key);
+    return value == null ? "" : value.trim();
+  }
+
+  private static String optionalOr(Properties properties, String key, String fallback) {
+    String value = optional(properties, key);
+    return value.isEmpty() ? fallback : value;
   }
 
   private static int integer(Properties properties, String key) {
@@ -71,7 +85,11 @@ public final class PropertiesConfigurationLoader implements ConfigurationLoader 
             "bridge.upstream-port",
             "bridge.maximum-sessions",
             "bridge.scheduler-threads",
-            "bridge.development-mode");
+            "bridge.development-mode",
+            "bridge.registry-path",
+            "bridge.registry-protocol-version",
+            "bridge.registry-sha256",
+            "bridge.offline-auth-mode");
     for (Object key : properties.keySet()) {
       if (!accepted.contains(key.toString())) {
         throw new ConfigurationException("Unknown configuration property: " + key);
