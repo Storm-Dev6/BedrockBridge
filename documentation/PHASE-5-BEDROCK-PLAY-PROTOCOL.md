@@ -259,3 +259,16 @@ disconnect, resource-pack response, or StartGame packet. External BDS stdout/std
 to lifecycle/authentication keywords and contained no rejection reason. This leaves the exact BDS
 decision opaque while proving the last successful boundary and avoids treating a timeout as a
 protocol fact.
+
+## MVP continuation boundary
+
+The real protocol-748 item registry is explicitly marked
+`BLOCKED_EXTERNAL_OFFICIAL_ARTIFACT`. The observer and offline-login generator remain diagnostic
+tools only; they do not block proxy development and never fabricate registry data.
+
+The standalone application now fails closed unless a user-owned, versioned external registry path,
+protocol version, and SHA-256 are configured. With a validated artifact it starts the Bedrock UDP
+RakNet admission runtime, decodes Login connection requests, applies the configured online or
+offline authentication policy, and exposes a typed Java-upstream state foundation for handshake,
+status, login, configuration, and play. The developer distribution includes
+`BedrockBridge-<version>.jar`; it contains no registry or Microsoft/Xbox credential material.
