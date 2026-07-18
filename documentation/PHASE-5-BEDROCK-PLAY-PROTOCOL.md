@@ -3,9 +3,12 @@
 ## Status
 
 Implementation is in progress on `agent/phase-5-bedrock-play-protocol`. P5.1 framing/registry and
-P5.2 network-settings/login/resource-pack control packets are implemented and validated. The Java
-21 gate `gradlew.bat --no-daemon clean check assemble` is green. P5.3 is intentionally paused at
-the StartGame item-list boundary until a locally generated registry is explicitly approved.
+P5.2 network-settings/login/resource-pack control packets are implemented and validated. The
+Bedrock session orchestrator now authenticates a login, opens the selected Java upstream, consumes
+the bounded Java Play Login world boundary, and exposes translated Java PLAY pumping. The Java 21
+gate `gradlew.bat --no-daemon clean check assemble` is green. StartGame remains fail-closed at the
+external protocol-748 registry-artifact boundary until a separately approved local artifact is
+available.
 
 ## Supported protocol
 
@@ -131,6 +134,16 @@ reaches `PLAY_READY` only after the caller confirms that StartGame was encoded a
 login-status ordering is intentionally owned by the later orchestrator and is not inferred from
 packet IDs.
 
+`BedrockJavaSession` is the current bounded orchestration seam. It decodes typed Bedrock control
+packets, applies the configured authentication policy, connects a `JavaSessionGateway`, waits for
+the Java Play Login packet before exposing the Bedrock login success, sends the server handshake,
+and starts the empty resource-pack flow. A `StartGameFrameProvider` must return one already-framed,
+validated protocol-748 StartGame packet; a missing provider, malformed frame, or external-registry
+failure produces `BLOCKED_EXTERNAL_OFFICIAL_ARTIFACT` and a deterministic Bedrock Disconnect. After
+the StartGame boundary, `pumpJavaOnce()` forwards only translator-approved Java PLAY outputs and
+propagates bounded Java disconnect reasons. This seam is covered with a synthetic offline-auth
+integration test; it does not retain Microsoft/Xbox tokens or private login keys.
+
 ## Wire model
 
 Every game packet begins with Mojang's unsigned-varint header. Bits 0-9 contain the packet ID, bits
@@ -201,14 +214,15 @@ keys.
 - Gate: byte round trips, independent known vectors, truncated/oversize/unknown/state tests, and
   login/resource-pack integration tests pass.
 
-### P5.3: typed StartGame and play-ready orchestration
+### P5.3: play-ready orchestration and external StartGame gate
 
-- Implement typed protocol-748 StartGame values, including level settings, experiments, movement
-  authority, registries, UUIDs, and bounded NBT values needed by the packet.
-- Add a deterministic minimal StartGame factory and play-ready orchestration.
-- Connect the play session to reassembled RakNet payloads without changing transport ownership.
-- Gate: a full network-settings -> login -> packs -> StartGame -> play-ready test passes and every
-  failure path cleans up.
+- Connect Bedrock login/authentication/resource-pack control flow to the Java upstream world-ready
+  boundary without inventing registry or StartGame fields.
+- Require a version-checked external StartGame frame provider and keep the session fail-closed until
+  the approved protocol-748 registry artifact is present.
+- Expose one bounded Java PLAY pump for disconnect and translator-approved control output.
+- Gate: synthetic network-settings -> login -> packs -> external StartGame gate tests pass and every
+  failure path produces a deterministic disconnect.
 
 ### P5.4: hardening and publication
 
@@ -233,10 +247,13 @@ Gradle test lifecycle. They complement targeted vectors rather than hiding failu
 
 ## Known scope boundary
 
-Phase 5 establishes a production-quality Bedrock play-ready vertical slice, not all gameplay
-translation. Chunk, entity, inventory, movement, chat, command, UI, and Java-edition translation
-packets belong to later phases. Snappy compression and additional Bedrock 1.21.x protocol numbers
-are also explicit future deltas, not silently accepted aliases of protocol 748.
+Phase 5 establishes a bounded control-flow and upstream world-state seam, not a claim of playable
+Bedrock spawn. Chunk, entity, inventory, movement, chat, command, UI, and Java-edition translation
+packets belong to later phases. The live RakNet connected-data adapter still needs to dispatch
+reassembled game payloads into this orchestrator. A real Bedrock spawn additionally requires the
+approved external protocol-748 registry artifact and a manual client test. Snappy compression and
+additional Bedrock 1.21.x protocol numbers are explicit future deltas, not silently accepted aliases
+of protocol 748.
 
 ## Current approval boundary
 

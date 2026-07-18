@@ -35,7 +35,7 @@ public final class OfflineLoginMaterial {
     String chainPayload =
         "{\"certificateAuthority\":true,\"exp\":"
             + (issuedAt + 3_600)
-            + ",\"extraData\":{\"displayName\":\"BedrockBridgeProbe\",\"identity\":\""
+            + ",\"extraData\":{\"displayName\":\"BedrockBridgePro\",\"identity\":\""
             + uuid
             + "\",\"XUID\":\"\"},\"iat\":"
             + issuedAt
@@ -148,7 +148,7 @@ public final class OfflineLoginMaterial {
         + "\"SkinId\":\"BedrockBridgeSynthetic\",\"SkinImageHeight\":64,"
         + "\"SkinImageWidth\":64,\"SkinResourcePatch\":\""
         + resourcePatch
-        + "\",\"ThirdPartyName\":\"BedrockBridgeProbe\","
+        + "\",\"ThirdPartyName\":\"BedrockBridgePro\","
         + "\"ThirdPartyNameOnly\":false,\"TrustedSkin\":true,\"UIProfile\":0}";
   }
 
