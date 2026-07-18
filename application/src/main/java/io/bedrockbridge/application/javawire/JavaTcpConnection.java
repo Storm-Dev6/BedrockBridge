@@ -5,6 +5,7 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.UUID;
 import java.util.function.Consumer;
 
@@ -98,10 +99,27 @@ public final class JavaTcpConnection implements Closeable {
 
   private JavaWirePacket.LoginSuccess configuration(JavaWirePacket.LoginSuccess success)
       throws IOException, JavaWireException {
+    send(
+        0x00,
+        new JavaWirePacket.ClientInformation("en_US", 10, 0, true, 0x7F, 1, false, true),
+        state);
     while (true) {
       JavaWirePacket packet = receive();
       if (packet instanceof JavaWirePacket.KnownPacks knownPacks) {
         send(0x07, knownPacks, state);
+      } else if (packet instanceof JavaWirePacket.RegistryData registryData) {
+        validateRegistryData(registryData);
+        eventSink.accept(
+            "java configuration registry="
+                + registryData.registryId()
+                + " entries="
+                + registryData.entries().size());
+      } else if (packet instanceof JavaWirePacket.FeatureFlags featureFlags) {
+        validateIdentifiers(featureFlags.flags(), 0x0C, "feature flag");
+        eventSink.accept("java configuration feature-flags=" + featureFlags.flags().size());
+      } else if (packet instanceof JavaWirePacket.UpdateTags updateTags) {
+        validateTags(updateTags);
+        eventSink.accept("java configuration tag-registries=" + updateTags.registries().size());
       } else if (packet instanceof JavaWirePacket.KeepAlive keepAlive) {
         send(0x04, new JavaWirePacket.KeepAlive(keepAlive.payload()), state);
       } else if (packet instanceof JavaWirePacket.FinishConfiguration) {
@@ -114,6 +132,51 @@ public final class JavaTcpConnection implements Closeable {
         throw new JavaWireException("unsupported Java configuration packet: " + packet);
       }
     }
+  }
+
+  private static void validateRegistryData(JavaWirePacket.RegistryData registryData)
+      throws JavaWireException {
+    validateIdentifier(registryData.registryId(), 0x07, "registry");
+    for (JavaWirePacket.RegistryEntry entry : registryData.entries()) {
+      validateIdentifier(entry.entryId(), 0x07, "registry entry");
+      if (entry.data() instanceof JavaNbt.End) {
+        throw unsupported(0x07, "registry entry has an end-only NBT payload");
+      }
+    }
+  }
+
+  private static void validateTags(JavaWirePacket.UpdateTags updateTags) throws JavaWireException {
+    for (JavaWirePacket.RegistryTags registry : updateTags.registries()) {
+      validateIdentifier(registry.registryId(), 0x0D, "tag registry");
+      for (JavaWirePacket.Tag tag : registry.tags()) {
+        validateIdentifier(tag.name(), 0x0D, "tag");
+        if (tag.entries().stream().anyMatch(entry -> entry < 0)) {
+          throw unsupported(0x0D, "tag entry id is negative");
+        }
+      }
+    }
+  }
+
+  private static void validateIdentifiers(List<String> identifiers, int packetId, String label)
+      throws JavaWireException {
+    for (String identifier : identifiers) {
+      validateIdentifier(identifier, packetId, label);
+    }
+  }
+
+  private static void validateIdentifier(String identifier, int packetId, String label)
+      throws JavaWireException {
+    if (identifier == null || !identifier.matches("[a-z0-9_.-]+:[a-z0-9_./-]+")) {
+      throw unsupported(packetId, "invalid " + label + " identifier");
+    }
+  }
+
+  private static JavaWireException unsupported(int packetId, String detail) {
+    return new JavaWireException(
+        "unsupported Java configuration packet id=0x"
+            + Integer.toHexString(packetId)
+            + ": "
+            + detail);
   }
 
   private void send(int packetId, JavaWirePacket packet, JavaWireState packetState)

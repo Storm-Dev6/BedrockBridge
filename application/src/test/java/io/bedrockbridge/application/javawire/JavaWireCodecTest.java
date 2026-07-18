@@ -3,6 +3,7 @@ package io.bedrockbridge.application.javawire;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -86,5 +87,53 @@ class JavaWireCodecTest {
                 new JavaWirePacket.LoginStart("Alex", new UUID(1, 2)), JavaWireState.LOGIN)
             .length,
         frame.fields().length);
+  }
+
+  @Test
+  void decodesRegistryFeatureAndTagPacketsAndRejectsUnknownIds() throws Exception {
+    ByteArrayOutputStream registry = new ByteArrayOutputStream();
+    writeString(registry, "minecraft:dimension_type");
+    JavaWireCodec.writeVarInt(registry, 1);
+    writeString(registry, "minecraft:overworld");
+    registry.write(1);
+    registry.write(10);
+    registry.write(0);
+    registry.write(0);
+    registry.write(8);
+    registry.write(0);
+    registry.write(1);
+    registry.write('x');
+    registry.write(0);
+    registry.write(1);
+    registry.write('v');
+    registry.write(0);
+    JavaWirePacket.RegistryData decoded =
+        (JavaWirePacket.RegistryData)
+            JavaWireCodec.decode(JavaWireState.CONFIGURATION, 0x07, registry.toByteArray());
+    assertEquals("minecraft:dimension_type", decoded.registryId());
+    assertEquals(1, decoded.entries().size());
+    assertEquals(JavaNbt.CompoundValue.class, decoded.entries().getFirst().data().getClass());
+
+    ByteArrayOutputStream tags = new ByteArrayOutputStream();
+    JavaWireCodec.writeVarInt(tags, 1);
+    writeString(tags, "minecraft:block");
+    JavaWireCodec.writeVarInt(tags, 1);
+    writeString(tags, "minecraft:mineable/pickaxe");
+    JavaWireCodec.writeVarInt(tags, 2);
+    JavaWireCodec.writeVarInt(tags, 3);
+    JavaWireCodec.writeVarInt(tags, 7);
+    JavaWirePacket.UpdateTags decodedTags =
+        (JavaWirePacket.UpdateTags)
+            JavaWireCodec.decode(JavaWireState.CONFIGURATION, 0x0D, tags.toByteArray());
+    assertEquals(2, decodedTags.registries().getFirst().tags().getFirst().entries().size());
+    assertThrows(
+        JavaWireException.class,
+        () -> JavaWireCodec.decode(JavaWireState.CONFIGURATION, 0x7F, new byte[0]));
+  }
+
+  private static void writeString(ByteArrayOutputStream output, String value) throws Exception {
+    byte[] bytes = value.getBytes(UTF_8);
+    JavaWireCodec.writeVarInt(output, bytes.length);
+    output.write(bytes);
   }
 }

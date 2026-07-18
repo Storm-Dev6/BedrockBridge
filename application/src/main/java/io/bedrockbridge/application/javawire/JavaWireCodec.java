@@ -109,6 +109,15 @@ public final class JavaWireCodec {
           writeString(out, pack.id(), 32767);
           writeString(out, pack.version(), 32767);
         }
+      } else if (packet instanceof JavaWirePacket.ClientInformation p) {
+        writeString(out, p.locale(), 16);
+        out.write(p.viewDistance());
+        writeVarInt(out, p.chatMode());
+        out.write(p.chatColors() ? 1 : 0);
+        out.write(p.displayedSkinParts());
+        writeVarInt(out, p.mainHand());
+        out.write(p.textFiltering() ? 1 : 0);
+        out.write(p.serverListings() ? 1 : 0);
       } else {
         throw new JavaWireException("packet is not valid serverbound in " + state + ": " + packet);
       }
@@ -187,9 +196,55 @@ public final class JavaWireCodec {
         }
         yield new JavaWirePacket.KnownPacks(packs);
       }
+      case 0x07 -> {
+        String registryId = readString(in, 32767);
+        int count = boundedCount(readVarInt(in), "registry entry");
+        List<JavaWirePacket.RegistryEntry> entries = new ArrayList<>();
+        for (int i = 0; i < count; i++) {
+          String entryId = readString(in, 32767);
+          JavaNbt data = in.readBoolean() ? JavaNbtCodec.read(in) : null;
+          entries.add(new JavaWirePacket.RegistryEntry(entryId, data));
+        }
+        yield new JavaWirePacket.RegistryData(registryId, entries);
+      }
+      case 0x0C -> {
+        int count = boundedCount(readVarInt(in), "feature flag");
+        List<String> flags = new ArrayList<>();
+        for (int i = 0; i < count; i++) {
+          flags.add(readString(in, 32767));
+        }
+        yield new JavaWirePacket.FeatureFlags(flags);
+      }
+      case 0x0D -> {
+        int registryCount = boundedCount(readVarInt(in), "tag registry");
+        List<JavaWirePacket.RegistryTags> registries = new ArrayList<>();
+        for (int i = 0; i < registryCount; i++) {
+          String registryId = readString(in, 32767);
+          int tagCount = boundedCount(readVarInt(in), "tag");
+          List<JavaWirePacket.Tag> tags = new ArrayList<>();
+          for (int tagIndex = 0; tagIndex < tagCount; tagIndex++) {
+            String name = readString(in, 32767);
+            int entryCount = boundedCount(readVarInt(in), "tag entry");
+            List<Integer> entries = new ArrayList<>();
+            for (int entryIndex = 0; entryIndex < entryCount; entryIndex++) {
+              entries.add(readVarInt(in));
+            }
+            tags.add(new JavaWirePacket.Tag(name, entries));
+          }
+          registries.add(new JavaWirePacket.RegistryTags(registryId, tags));
+        }
+        yield new JavaWirePacket.UpdateTags(registries);
+      }
       case 0x02 -> new JavaWirePacket.Disconnect(readString(in, 262144));
       default -> throw new JavaWireException("unsupported configuration packet id=" + id);
     };
+  }
+
+  private static int boundedCount(int count, String label) throws JavaWireException {
+    if (count < 0 || count > 65_536) {
+      throw new JavaWireException("invalid " + label + " count=" + count);
+    }
+    return count;
   }
 
   public static void writeVarInt(OutputStream out, int value) throws IOException {

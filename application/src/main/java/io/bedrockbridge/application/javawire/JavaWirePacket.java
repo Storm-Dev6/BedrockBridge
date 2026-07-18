@@ -16,6 +16,10 @@ public sealed interface JavaWirePacket
         JavaWirePacket.Disconnect,
         JavaWirePacket.KeepAlive,
         JavaWirePacket.KnownPacks,
+        JavaWirePacket.ClientInformation,
+        JavaWirePacket.RegistryData,
+        JavaWirePacket.FeatureFlags,
+        JavaWirePacket.UpdateTags,
         JavaWirePacket.FinishConfiguration,
         JavaWirePacket.AcknowledgeFinishConfiguration {
   record Handshake(int protocolVersion, String host, int port, int nextState)
@@ -49,6 +53,50 @@ public sealed interface JavaWirePacket
   }
 
   record KnownPack(String namespace, String id, String version) {}
+
+  record ClientInformation(
+      String locale,
+      int viewDistance,
+      int chatMode,
+      boolean chatColors,
+      int displayedSkinParts,
+      int mainHand,
+      boolean textFiltering,
+      boolean serverListings)
+      implements JavaWirePacket {}
+
+  record RegistryData(String registryId, java.util.List<RegistryEntry> entries)
+      implements JavaWirePacket {
+    public RegistryData {
+      entries = java.util.List.copyOf(entries);
+    }
+  }
+
+  record RegistryEntry(String entryId, JavaNbt data) {}
+
+  record FeatureFlags(java.util.List<String> flags) implements JavaWirePacket {
+    public FeatureFlags {
+      flags = java.util.List.copyOf(flags);
+    }
+  }
+
+  record UpdateTags(java.util.List<RegistryTags> registries) implements JavaWirePacket {
+    public UpdateTags {
+      registries = java.util.List.copyOf(registries);
+    }
+  }
+
+  record RegistryTags(String registryId, java.util.List<Tag> tags) {
+    public RegistryTags {
+      tags = java.util.List.copyOf(tags);
+    }
+  }
+
+  record Tag(String name, java.util.List<Integer> entries) {
+    public Tag {
+      entries = java.util.List.copyOf(entries);
+    }
+  }
 
   record FinishConfiguration() implements JavaWirePacket {}
 
