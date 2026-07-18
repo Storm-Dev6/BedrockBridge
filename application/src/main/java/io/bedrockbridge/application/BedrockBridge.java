@@ -2,12 +2,15 @@ package io.bedrockbridge.application;
 
 import io.bedrockbridge.api.BridgeStartedEvent;
 import io.bedrockbridge.api.BridgeStoppingEvent;
+import io.bedrockbridge.application.translation.JavaBedrockTranslator;
+import io.bedrockbridge.application.translation.JavaUpstreamConnection;
 import io.bedrockbridge.common.EventBus;
 import io.bedrockbridge.common.LifecycleException;
 import io.bedrockbridge.common.TaskScheduler;
 import io.bedrockbridge.config.BridgeConfiguration;
 import io.bedrockbridge.observability.BridgeMetrics;
 import io.bedrockbridge.observability.Logging;
+import java.io.IOException;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Objects;
@@ -24,6 +27,8 @@ public final class BedrockBridge implements AutoCloseable {
   private final BridgeMetrics metrics;
   private final Clock clock;
   private final BedrockServerRuntime serverRuntime;
+  private final java.util.Set<JavaUpstreamConnection> upstreamConnections =
+      java.util.concurrent.ConcurrentHashMap.newKeySet();
   private final AtomicReference<LifecycleState> state = new AtomicReference<>(LifecycleState.NEW);
   private final CountDownLatch termination = new CountDownLatch(1);
 
@@ -84,6 +89,21 @@ public final class BedrockBridge implements AutoCloseable {
     return state.get();
   }
 
+  /** Opens and logs into the configured offline Java upstream for one Bedrock session. */
+  public JavaUpstreamConnection connectJavaUpstream(String username)
+      throws IOException, io.bedrockbridge.application.javawire.JavaWireException {
+    JavaUpstreamConnection connection =
+        JavaUpstreamConnection.loginOffline(
+            configuration.upstreamAddress(),
+            configuration.upstreamPort(),
+            username,
+            5_000,
+            15_000,
+            new JavaBedrockTranslator());
+    upstreamConnections.add(connection);
+    return connection;
+  }
+
   /** Blocks the caller until shutdown completes while preserving interruption semantics. */
   public void awaitTermination() throws InterruptedException {
     termination.await();
@@ -125,6 +145,14 @@ public final class BedrockBridge implements AutoCloseable {
         failure.addSuppressed(schedulerFailure);
       }
     } finally {
+      for (JavaUpstreamConnection connection : upstreamConnections) {
+        try {
+          connection.close();
+        } catch (IOException closeFailure) {
+          LOGGER.warn("Java upstream close failed", closeFailure);
+        }
+      }
+      upstreamConnections.clear();
       if (serverRuntime != null) {
         serverRuntime.close();
       }

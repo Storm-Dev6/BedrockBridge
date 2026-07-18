@@ -272,3 +272,49 @@ RakNet admission runtime, decodes Login connection requests, applies the configu
 offline authentication policy, and exposes a typed Java-upstream state foundation for handshake,
 status, login, configuration, and play. The developer distribution includes
 `BedrockBridge-<version>.jar`; it contains no registry or Microsoft/Xbox credential material.
+
+## Java upstream vertical slice
+
+The branch now contains a clean-room Java TCP codec and blocking transport for the Java 1.21.1
+wire (protocol 767): VarInt framing, big-endian fixed fields, UTF-8 bounds, optional zlib packet
+compression, handshake, status/ping, offline login, login acknowledgement, known-packs,
+configuration keep-alive, finish-configuration acknowledgement, and bounded disconnect reasons.
+The field definitions were independently implemented from the published protocol description
+([Java 1.21.1 protocol reference](https://wikivg.booky.dev/Protocol)); no bridge implementation or
+proprietary test data is used.
+
+The application composition root exposes the configured upstream address and port to a session
+through `BedrockBridge.connectJavaUpstream(username)`. A successful offline upstream login yields
+the downstream `LOGIN_SUCCESS` PlayStatus and an empty resource-pack catalog through the translator;
+Java keep-alives are echoed and a bounded Java JSON reason is forwarded as a Bedrock disconnect.
+Online-mode Java encryption/authentication is deliberately not emulated: an encryption request or
+unsupported packet fails closed, without requesting or storing credentials.
+
+### Manual socket test
+
+Use a local Java 1.21.1 server with `online-mode=false` and the normal Java TCP port (25565), then
+copy `application/src/main/resources/bridge.properties.example` and set:
+
+* `bridge.upstream-address=127.0.0.1` and `bridge.upstream-port=25565`;
+* a user-generated, externally stored protocol-748 registry path, protocol, and SHA-256;
+* `bridge.offline-auth-mode=allow-self-signed` only when testing synthetic/offline Bedrock login.
+
+Start with:
+
+```text
+java -jar application/build/libs/BedrockBridge-0.1.0-SNAPSHOT.jar path/to/bridge.properties
+```
+
+The repository integration harness uses real loopback TCP sockets and synthetic Java packet
+fixtures. A real Bedrock client additionally requires the external registry and a manual client
+test; the registry is never downloaded by Gradle or CI.
+
+### First remaining protocol boundary
+
+The transport reaches Java `PLAY` only for a server whose configuration stream is limited to the
+implemented known-packs, keep-alive, and finish-configuration packets. A normal vanilla/Paper
+1.21.1 server will next send additional configuration packets (notably registry data, feature
+flags, tags, and client information). These are intentionally rejected as unsupported rather than
+decoded from guessed fields. Consequently, the first remaining blocking state for a real server is
+the configuration registry-data/feature stream, followed by StartGame construction on Bedrock,
+which remains fail-closed on `BLOCKED_EXTERNAL_OFFICIAL_ARTIFACT`.

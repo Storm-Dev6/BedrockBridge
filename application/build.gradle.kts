@@ -8,6 +8,7 @@ dependencies {
     implementation(project(":config"))
     implementation(project(":bedrock-registry-generator"))
     implementation(project(":bedrock-session"))
+    implementation(project(":bedrock-packets"))
     implementation(project(":packet-buffer"))
     implementation(project(":udp-transport"))
     implementation(project(":observability"))
