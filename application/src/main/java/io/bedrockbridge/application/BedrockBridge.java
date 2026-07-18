@@ -23,6 +23,7 @@ public final class BedrockBridge implements AutoCloseable {
   private final TaskScheduler scheduler;
   private final BridgeMetrics metrics;
   private final Clock clock;
+  private final BedrockServerRuntime serverRuntime;
   private final AtomicReference<LifecycleState> state = new AtomicReference<>(LifecycleState.NEW);
   private final CountDownLatch termination = new CountDownLatch(1);
 
@@ -33,11 +34,23 @@ public final class BedrockBridge implements AutoCloseable {
       TaskScheduler scheduler,
       BridgeMetrics metrics,
       Clock clock) {
+    this(configuration, eventBus, scheduler, metrics, clock, null);
+  }
+
+  /** Creates a bridge with an optional real Bedrock UDP runtime. */
+  public BedrockBridge(
+      BridgeConfiguration configuration,
+      EventBus eventBus,
+      TaskScheduler scheduler,
+      BridgeMetrics metrics,
+      Clock clock,
+      BedrockServerRuntime serverRuntime) {
     this.configuration = Objects.requireNonNull(configuration, "configuration");
     this.eventBus = Objects.requireNonNull(eventBus, "eventBus");
     this.scheduler = Objects.requireNonNull(scheduler, "scheduler");
     this.metrics = Objects.requireNonNull(metrics, "metrics");
     this.clock = Objects.requireNonNull(clock, "clock");
+    this.serverRuntime = serverRuntime;
   }
 
   /** Starts infrastructure exactly once and publishes the completion event. */
@@ -49,6 +62,9 @@ public final class BedrockBridge implements AutoCloseable {
     metrics.lifecycleState(1);
     try {
       state.set(LifecycleState.RUNNING);
+      if (serverRuntime != null) {
+        serverRuntime.start();
+      }
       metrics.recordStarted();
       eventBus.publish(new BridgeStartedEvent(Instant.now(clock)));
       LOGGER.info("{} infrastructure started", configuration.applicationName());
@@ -56,6 +72,9 @@ public final class BedrockBridge implements AutoCloseable {
       state.set(LifecycleState.FAILED);
       metrics.lifecycleState(5);
       scheduler.close();
+      if (serverRuntime != null) {
+        serverRuntime.close();
+      }
       throw new LifecycleException("Bridge startup failed", failure);
     }
   }
@@ -106,6 +125,9 @@ public final class BedrockBridge implements AutoCloseable {
         failure.addSuppressed(schedulerFailure);
       }
     } finally {
+      if (serverRuntime != null) {
+        serverRuntime.close();
+      }
       state.set(LifecycleState.STOPPED);
       metrics.recordStopped();
       termination.countDown();

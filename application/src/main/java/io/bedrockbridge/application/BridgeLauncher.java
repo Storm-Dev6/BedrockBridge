@@ -9,6 +9,7 @@ import io.bedrockbridge.config.BridgeConfiguration;
 import io.bedrockbridge.config.DefaultConfigurationValidator;
 import io.bedrockbridge.config.PropertiesConfigurationLoader;
 import io.bedrockbridge.observability.BridgeMetrics;
+import io.bedrockbridge.registry.generator.VersionedExternalItemRegistryLoader;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.nio.file.Path;
@@ -26,6 +27,7 @@ public final class BridgeLauncher {
     BridgeConfiguration configuration =
         new DefaultConfigurationValidator()
             .validate(new PropertiesConfigurationLoader().load(Path.of(arguments[0])));
+    requireExternalRegistry(configuration);
     BedrockBridge bridge = create(configuration);
     Runtime.getRuntime().addShutdownHook(new Thread(bridge::close, "bridge-shutdown"));
     bridge.start();
@@ -34,6 +36,26 @@ public final class BridgeLauncher {
     } catch (InterruptedException interrupted) {
       Thread.currentThread().interrupt();
       bridge.close();
+    }
+  }
+
+  private static void requireExternalRegistry(BridgeConfiguration configuration) {
+    if (configuration.registryPath().isBlank()
+        || configuration.registryProtocolVersion().isBlank()
+        || configuration.registrySha256().isBlank()) {
+      throw new IllegalStateException(
+          "BLOCKED_EXTERNAL_OFFICIAL_ARTIFACT: configure bridge.registry-path, "
+              + "bridge.registry-protocol-version, and bridge.registry-sha256 before startup");
+    }
+    try {
+      new VersionedExternalItemRegistryLoader()
+          .load(
+              Path.of(configuration.registryPath()),
+              configuration.registryProtocolVersion(),
+              configuration.registrySha256());
+    } catch (java.io.IOException | RuntimeException failure) {
+      throw new IllegalStateException(
+          "BLOCKED_EXTERNAL_OFFICIAL_ARTIFACT: external registry validation failed", failure);
     }
   }
 
@@ -49,11 +71,15 @@ public final class BridgeLauncher {
         .register(TaskScheduler.class, scheduler)
         .register(MeterRegistry.class, meterRegistry)
         .register(BridgeMetrics.class, new BridgeMetrics(meterRegistry));
+    BedrockServerRuntime runtime =
+        new BedrockServerRuntime(
+            configuration, services.require(TaskScheduler.class), Clock.systemUTC());
     return new BedrockBridge(
         configuration,
         services.require(EventBus.class),
         services.require(TaskScheduler.class),
         services.require(BridgeMetrics.class),
-        Clock.systemUTC());
+        Clock.systemUTC(),
+        runtime);
   }
 }
