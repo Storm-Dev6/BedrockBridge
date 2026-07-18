@@ -290,6 +290,20 @@ offline authentication policy, and exposes a typed Java-upstream state foundatio
 status, login, configuration, and play. The developer distribution includes
 `BedrockBridge-<version>.jar`; it contains no registry or Microsoft/Xbox credential material.
 
+### Work-package record: Bedrock-to-Java session seam
+
+- Commit: `121acff` (`connect Bedrock session flow to Java world gateway`), pushed to
+  `agent/phase-5-bedrock-play-protocol`.
+- Local validation: `gradlew.bat --no-daemon clean check assemble` and the complete Gradle test
+  suite passed under Java 21; `BedrockJavaSessionTest` proves the synthetic control-flow boundary.
+- CI: GitHub Actions run `29645478549` completed successfully (build job `88082891050`).
+- Result: Bedrock authentication policy, Java world-ready wait, encryption-handshake/resource-pack
+  ordering, bounded Java PLAY pump, and safe Java disconnect forwarding are implemented. The
+  StartGame provider remains fail-closed on `BLOCKED_EXTERNAL_OFFICIAL_ARTIFACT`.
+- Next gate: connect the live reassembled RakNet DATA adapter to this seam, then perform a manual
+  Bedrock-client StartGame/spawn test with the separately approved external registry. No main-branch
+  merge was performed.
+
 ## Java upstream vertical slice
 
 The branch now contains a clean-room Java TCP codec and blocking transport for the Java 1.21.1
