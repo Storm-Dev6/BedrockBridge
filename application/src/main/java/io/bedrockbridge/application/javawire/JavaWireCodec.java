@@ -236,7 +236,9 @@ public final class JavaWireCodec {
         yield new JavaWirePacket.UpdateTags(registries);
       }
       case 0x02 -> new JavaWirePacket.Disconnect(readString(in, 262144));
-      default -> throw new JavaWireException("unsupported configuration packet id=" + id);
+      default ->
+          throw new JavaWireException(
+              "unsupported configuration packet id=0x" + Integer.toHexString(id));
     };
   }
 
