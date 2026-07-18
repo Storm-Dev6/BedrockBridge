@@ -103,9 +103,13 @@ bytes or metadata.
 The unchanged `bedrock_server.exe` from the verified distribution was launched in the isolated
 external work directory `C:\Users\Gamestormzone\Documents\BDS\work\phase5-loopback-20260717-protocol748`.
 The probe completed RakNet negotiation and the protocol-748 NetworkSettings exchange, then sent a
-synthetic, locally signed Login request over the negotiated ZLIB connection. The BDS instance did
-not return a clientbound game packet within the bounded observation window, so no StartGame frame
-was observed and no real registry artifact was created. The process was stopped after the attempt.
+synthetic, locally signed Login request over the negotiated ZLIB connection. The trace proves
+`RequestNetworkSettings` (packet 143) received, `Login` (packet 1) sent, and no subsequent
+clientbound game packet; only RakNet ACK/control datagrams (IDs 192/132) arrived until the bounded
+timeout. No disconnect packet, encryption request, resource-pack packet, or BDS auth/error line was
+observed. The last proven boundary is therefore `LOGIN_SENT`, not a rejected packet reason. No
+StartGame frame was observed and no real registry artifact was created. The process was stopped
+after the attempt.
 
 This is an authentication/interop boundary, not permission to fabricate a packet or bypass BDS
 validation. The repository therefore contains only the observer, extractor, and synthetic tests;

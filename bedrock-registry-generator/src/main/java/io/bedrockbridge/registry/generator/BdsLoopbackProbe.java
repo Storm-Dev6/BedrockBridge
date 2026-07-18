@@ -43,21 +43,14 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.SocketTimeoutException;
 import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
-import java.security.KeyPair;
-import java.security.KeyPairGenerator;
-import java.security.Signature;
-import java.security.spec.ECGenParameterSpec;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Base64;
 import java.util.Deque;
 import java.util.List;
-import java.util.UUID;
 
 /** Minimal clean-room RakNet client that observes protocol-748 network settings on loopback. */
 public final class BdsLoopbackProbe implements AutoCloseable {
@@ -77,6 +70,7 @@ public final class BdsLoopbackProbe implements AutoCloseable {
   private final SplitPacketAssembler splitAssembler =
       new SplitPacketAssembler(64, 4 * 1_024 * 1_024, Duration.ofSeconds(30));
   private final Deque<byte[]> connectedPayloads = new ArrayDeque<>();
+  private final ProbeTrace trace = new ProbeTrace();
   private int datagramSequence;
   private int reliableIndex;
   private int orderIndex;
@@ -86,6 +80,7 @@ public final class BdsLoopbackProbe implements AutoCloseable {
       throw new IllegalArgumentException("BDS probe target must be loopback");
     }
     this.server = server;
+    trace.state("CREATED");
     clientGuid = 0x4244524F434B3734L;
     socket = new DatagramSocket(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0));
     socket.setSoTimeout(10_000);
@@ -97,30 +92,40 @@ public final class BdsLoopbackProbe implements AutoCloseable {
 
   /** Connects only to the supplied loopback port and writes the approved three-field artifact. */
   public static void main(String[] args) throws Exception {
-    if (args.length != 2) {
-      throw new IllegalArgumentException("Usage: <loopback-port> <external-item-artifact>");
+    if (args.length < 2 || args.length > 4) {
+      throw new IllegalArgumentException(
+          "Usage: <loopback-port> <external-item-artifact> [bds-stdout] [bds-stderr]");
     }
     int port = Integer.parseInt(args[0]);
     Path output = Path.of(args[1]).toAbsolutePath().normalize();
+    Path stdout = args.length >= 3 ? Path.of(args[2]).toAbsolutePath().normalize() : null;
+    Path stderr = args.length >= 4 ? Path.of(args[3]).toAbsolutePath().normalize() : null;
     try (var probe =
         new BdsLoopbackProbe(new InetSocketAddress(InetAddress.getLoopbackAddress(), port))) {
-      Observation observation = probe.observeStartGame();
-      List<ObservedItem> items = observation.itemRegistry(BedrockProtocolLimits.defaults());
-      ItemRegistryArtifact.Summary summary = ItemRegistryArtifact.write(output, items);
-      System.out.printf(
-          "protocol=%d threshold=%d algorithm=%s throttle=%s itemCount=%d artifactBytes=%d artifactSha256=%s%n",
-          BedrockProtocol.NETWORK_PROTOCOL_748,
-          observation.settings().compressionThreshold(),
-          observation.settings().compressionAlgorithm(),
-          observation.settings().clientThrottleEnabled(),
-          summary.itemCount(),
-          summary.byteCount(),
-          summary.sha256());
+      try {
+        Observation observation = probe.observeStartGame();
+        List<ObservedItem> items = observation.itemRegistry(BedrockProtocolLimits.defaults());
+        ItemRegistryArtifact.Summary summary = ItemRegistryArtifact.write(output, items);
+        System.out.printf(
+            "protocol=%d threshold=%d algorithm=%s throttle=%s itemCount=%d artifactBytes=%d artifactSha256=%s%n",
+            BedrockProtocol.NETWORK_PROTOCOL_748,
+            observation.settings().compressionThreshold(),
+            observation.settings().compressionAlgorithm(),
+            observation.settings().clientThrottleEnabled(),
+            summary.itemCount(),
+            summary.byteCount(),
+            summary.sha256());
+      } catch (Exception failure) {
+        probe.printDiagnostics(failure);
+        probe.printServerLogs(stdout, stderr);
+        throw failure;
+      }
     }
   }
 
   /** Performs the loopback login flow and keeps the observed frame in memory only. */
   public Observation observeStartGame() throws Exception {
+    trace.state("NETWORK_SETTINGS");
     NetworkSettingsPacket settings = observeNetworkSettings();
     if (settings.compressionAlgorithm().wireValue() != 0) {
       throw new IOException("Protocol-748 probe supports only the observed ZLIB algorithm");
@@ -140,23 +145,27 @@ public final class BdsLoopbackProbe implements AutoCloseable {
                 limits.maximumDecompressedBatchBytes(),
                 limits.maximumCompressionRatio()));
 
+    OfflineLoginMaterial.Generated loginMaterial =
+        OfflineLoginMaterial.generate(server.getPort(), Instant.now());
+    OfflineLoginMaterial.verify(loginMaterial, Instant.now());
+    trace.state("LOGIN_PAYLOAD_VERIFIED");
     byte[] login =
         playCodec.encode(
             new LoginPacket(
-                BedrockProtocol.NETWORK_PROTOCOL_748,
-                createSyntheticConnectionRequest(server.getPort())),
+                BedrockProtocol.NETWORK_PROTOCOL_748, loginMaterial.connectionRequest()),
             BedrockPlayState.LOGIN,
             0,
             0);
+    trace.state("LOGIN_SENT");
     sendCompressedGameBatch(login, limits, compression);
 
     for (int attempts = 0; attempts < 128; attempts++) {
       List<BedrockPacketFrame> frames = receiveCompressedBatch(limits, compression);
       for (BedrockPacketFrame frame : frames) {
         int packetId = frame.header().packetId();
-        System.out.printf(
-            "clientboundPacket=%d payloadBytes=%d%n", packetId, frame.payloadLength());
+        trace.packet("IN", packetId, frame.payloadLength());
         if (packetId == 6) {
+          trace.state("RESOURCE_PACKS");
           sendPlayPacket(
               playCodec,
               new ResourcePackClientResponsePacket(
@@ -173,15 +182,51 @@ public final class BdsLoopbackProbe implements AutoCloseable {
               limits,
               compression);
         } else if (packetId == 11) {
+          trace.state("START_GAME_OBSERVED");
           return new Observation(settings, new BedrockPacketFrameCodec(limits).encode(frame));
         } else if (packetId == 5) {
+          trace.disconnect("DISCONNECT_PACKET");
           throw new IOException("BDS disconnected the synthetic loopback client");
         } else if (packetId == 3) {
+          trace.state("ENCRYPTION_REQUESTED");
           throw new IOException("BDS requested an encrypted online-mode handshake");
         }
       }
     }
+    trace.timeout("StartGame after login/resource-pack flow");
     throw new SocketTimeoutException("BDS did not send StartGame");
+  }
+
+  private void printDiagnostics(Exception failure) {
+    System.err.println("BDS_LOOPBACK_DIAGNOSTICS failure=" + failure.getClass().getSimpleName());
+    System.err.println("BDS_LOOPBACK_DIAGNOSTICS message=" + safeMessage(failure));
+    for (String event : trace.snapshot()) {
+      System.err.println("BDS_LOOPBACK_DIAGNOSTICS " + event);
+    }
+  }
+
+  private void printServerLogs(Path stdout, Path stderr) {
+    printServerLog("stdout", stdout);
+    printServerLog("stderr", stderr);
+  }
+
+  private static void printServerLog(String stream, Path path) {
+    if (path == null) {
+      return;
+    }
+    try {
+      for (String line : BdsServerLogReader.relevant(path)) {
+        System.err.println("BDS_LOOPBACK_DIAGNOSTICS BDS_" + stream + " " + line);
+      }
+    } catch (IOException failure) {
+      System.err.println(
+          "BDS_LOOPBACK_DIAGNOSTICS BDS_" + stream + "_READ_ERROR " + safeMessage(failure));
+    }
+  }
+
+  private static String safeMessage(Exception failure) {
+    String message = failure.getMessage();
+    return message == null ? "<none>" : message.replaceAll("[\\r\\n]+", " ");
   }
 
   private void sendPlayPacket(
@@ -197,13 +242,21 @@ public final class BdsLoopbackProbe implements AutoCloseable {
   private void sendCompressedGameBatch(
       byte[] packet, BedrockProtocolLimits limits, BedrockCompressionCodec compression)
       throws IOException {
+    int packetId = new BedrockPacketFrameCodec(limits).decode(packet).header().packetId();
+    trace.packet("OUT", packetId, packet.length);
     byte[] batch =
         new BedrockBatchCodec(limits)
             .encode(List.of(new BedrockPacketFrameCodec(limits).decode(packet)));
     byte[] compressed = compression.compress(batch);
-    System.out.printf(
-        "serverboundPacketBytes=%d batchBytes=%d compressedBytes=%d%n",
-        packet.length, batch.length, compressed.length);
+    trace.note(
+        "OUT_BATCH packetId="
+            + packetId
+            + " packetBytes="
+            + packet.length
+            + " batchBytes="
+            + batch.length
+            + " compressedBytes="
+            + compressed.length);
     byte[] connected = new byte[compressed.length + 1];
     connected[0] = (byte) GAME_PACKET;
     System.arraycopy(compressed, 0, connected, 1, compressed.length);
@@ -252,6 +305,10 @@ public final class BdsLoopbackProbe implements AutoCloseable {
             BedrockPlayState.NETWORK_SETTINGS,
             0,
             0);
+    trace.packet(
+        "OUT",
+        new BedrockPacketFrameCodec(limits).decode(request).header().packetId(),
+        request.length);
     sendConnected(gameBatch(request, limits));
     byte[] response = receiveGamePacket();
     List<BedrockPacketFrame> frames =
@@ -267,13 +324,18 @@ public final class BdsLoopbackProbe implements AutoCloseable {
     if (!(decoded instanceof NetworkSettingsPacket settings)) {
       throw new IOException("BDS did not return NetworkSettings");
     }
+    trace.packet("IN", frames.getFirst().header().packetId(), encoded.length);
+    trace.state("NETWORK_SETTINGS_RECEIVED");
     return settings;
   }
 
   private Packet exchangeOffline(Packet request) throws IOException {
+    trace.note("OUT_RAKNET " + request.getClass().getSimpleName());
     sendRaw(encodeHandshake(request));
     byte[] reply = receiveRaw();
-    return handshakeCodec.decode(ByteBuffer.wrap(reply), PacketDirection.CLIENTBOUND);
+    Packet decoded = handshakeCodec.decode(ByteBuffer.wrap(reply), PacketDirection.CLIENTBOUND);
+    trace.note("IN_RAKNET " + decoded.getClass().getSimpleName());
+    return decoded;
   }
 
   private byte[] encodeHandshake(Packet packet) {
@@ -290,10 +352,13 @@ public final class BdsLoopbackProbe implements AutoCloseable {
         continue;
       }
       Packet decoded = handshakeCodec.decode(ByteBuffer.wrap(payload), PacketDirection.CLIENTBOUND);
+      trace.note("IN_RAKNET " + decoded.getClass().getSimpleName());
       if (decoded instanceof ConnectionRequestAccepted accepted) {
+        trace.state("RAKNET_CONNECTED");
         return accepted;
       }
     }
+    trace.timeout("ConnectionRequestAccepted");
     throw new SocketTimeoutException("BDS did not accept the connected RakNet request");
   }
 
@@ -309,11 +374,14 @@ public final class BdsLoopbackProbe implements AutoCloseable {
           sendConnectedPong(payload);
           continue;
         }
-        System.out.printf(
-            "connectedControl=%d payloadBytes=%d%n",
-            Byte.toUnsignedInt(payload[0]), payload.length);
+        trace.note(
+            "IN_RAKNET_CONTROL id="
+                + Byte.toUnsignedInt(payload[0])
+                + " payloadBytes="
+                + payload.length);
       }
     }
+    trace.timeout("game packet");
     throw new SocketTimeoutException("BDS did not return a game packet");
   }
 
@@ -362,6 +430,7 @@ public final class BdsLoopbackProbe implements AutoCloseable {
     }
     byte[] datagram = receiveRaw();
     int id = Byte.toUnsignedInt(datagram[0]);
+    trace.note("IN_DATAGRAM id=" + id + " bytes=" + datagram.length);
     if (id == ACK || id == 0xA0) {
       return null;
     }
@@ -385,92 +454,6 @@ public final class BdsLoopbackProbe implements AutoCloseable {
               });
     }
     return connectedPayloads.isEmpty() ? null : connectedPayloads.removeFirst();
-  }
-
-  private static byte[] createSyntheticConnectionRequest(int port) throws Exception {
-    KeyPairGenerator generator = KeyPairGenerator.getInstance("EC");
-    generator.initialize(new ECGenParameterSpec("secp384r1"));
-    KeyPair identity = generator.generateKeyPair();
-    String publicKey = Base64.getEncoder().encodeToString(identity.getPublic().getEncoded());
-    long now = Instant.now().getEpochSecond();
-    String uuid = UUID.randomUUID().toString();
-    String chainPayload =
-        "{\"certificateAuthority\":true,\"exp\":"
-            + (now + 3_600)
-            + ",\"extraData\":{\"displayName\":\"BedrockBridgeProbe\",\"identity\":\""
-            + uuid
-            + "\",\"XUID\":\"\"},\"identityPublicKey\":\""
-            + publicKey
-            + "\",\"nbf\":"
-            + (now - 60)
-            + "}";
-    String chainToken = signJwt(identity, publicKey, chainPayload);
-    String chainJson = "{\"chain\":[\"" + chainToken + "\"]}";
-
-    byte[] skin = new byte[64 * 64 * 4];
-    for (int index = 3; index < skin.length; index += 4) {
-      skin[index] = (byte) 0xFF;
-    }
-    String skinData = Base64.getEncoder().encodeToString(skin);
-    String resourcePatch =
-        Base64.getEncoder()
-            .encodeToString(
-                "{\"geometry\":{\"default\":\"geometry.humanoid.custom\"}}"
-                    .getBytes(StandardCharsets.UTF_8));
-    String emptyObject = Base64.getEncoder().encodeToString("{}".getBytes(StandardCharsets.UTF_8));
-    String clientPayload =
-        "{\"AnimatedImageData\":[],\"ArmSize\":\"wide\",\"CapeData\":\"\","
-            + "\"CapeId\":\"\",\"CapeImageHeight\":0,\"CapeImageWidth\":0,"
-            + "\"CapeOnClassicSkin\":false,\"ClientRandomId\":748,"
-            + "\"CompatibleWithClientSideChunkGen\":false,\"CurrentInputMode\":1,"
-            + "\"DefaultInputMode\":1,\"DeviceId\":\""
-            + uuid
-            + "\",\"DeviceModel\":\"BedrockBridge\",\"DeviceOS\":8,"
-            + "\"GameVersion\":\"1.21.40\",\"GuiScale\":0,\"IsEditorMode\":false,"
-            + "\"LanguageCode\":\"en_US\",\"OverrideSkin\":false,"
-            + "\"PersonaPieces\":[],\"PersonaSkin\":false,\"PieceTintColors\":[],"
-            + "\"PlatformOfflineId\":\"\",\"PlatformOnlineId\":\"\","
-            + "\"PlatformUserId\":\"\",\"PlayFabId\":\"\",\"PremiumSkin\":false,"
-            + "\"SelfSignedId\":\""
-            + uuid
-            + "\",\"ServerAddress\":\"127.0.0.1:"
-            + port
-            + "\",\"SkinAnimationData\":\"\",\"SkinColor\":\"#0\","
-            + "\"SkinData\":\""
-            + skinData
-            + "\",\"SkinGeometryData\":\""
-            + emptyObject
-            + "\",\"SkinGeometryDataEngineVersion\":\"1.21.40\","
-            + "\"SkinId\":\"BedrockBridgeSynthetic\",\"SkinImageHeight\":64,"
-            + "\"SkinImageWidth\":64,\"SkinResourcePatch\":\""
-            + resourcePatch
-            + "\",\"ThirdPartyName\":\"BedrockBridgeProbe\","
-            + "\"ThirdPartyNameOnly\":false,\"TrustedSkin\":true,\"UIProfile\":0}";
-    String clientToken = signJwt(identity, publicKey, clientPayload);
-
-    byte[] chain = chainJson.getBytes(StandardCharsets.UTF_8);
-    byte[] client = clientToken.getBytes(StandardCharsets.UTF_8);
-    return ByteBuffer.allocate(8 + chain.length + client.length)
-        .order(ByteOrder.LITTLE_ENDIAN)
-        .putInt(chain.length)
-        .put(chain)
-        .putInt(client.length)
-        .put(client)
-        .array();
-  }
-
-  private static String signJwt(KeyPair keyPair, String publicKey, String payload)
-      throws Exception {
-    Base64.Encoder url = Base64.getUrlEncoder().withoutPadding();
-    String header = "{\"alg\":\"ES384\",\"x5u\":\"" + publicKey + "\"}";
-    String signingInput =
-        url.encodeToString(header.getBytes(StandardCharsets.UTF_8))
-            + "."
-            + url.encodeToString(payload.getBytes(StandardCharsets.UTF_8));
-    Signature signer = Signature.getInstance("SHA384withECDSAinP1363Format");
-    signer.initSign(keyPair.getPrivate());
-    signer.update(signingInput.getBytes(StandardCharsets.US_ASCII));
-    return signingInput + "." + url.encodeToString(signer.sign());
   }
 
   /** Transient protocol observation; frame bytes are never written by this class. */
@@ -522,6 +505,34 @@ public final class BdsLoopbackProbe implements AutoCloseable {
 
   private void sendRaw(byte[] bytes) throws IOException {
     socket.send(new DatagramPacket(bytes, bytes.length, server));
+  }
+
+  private static final class ProbeTrace {
+    private final List<String> events = new ArrayList<>();
+
+    void state(String state) {
+      events.add("STATE " + state);
+    }
+
+    void packet(String direction, int packetId, int bytes) {
+      events.add(direction + "_PACKET id=" + packetId + " bytes=" + bytes);
+    }
+
+    void note(String event) {
+      events.add(event);
+    }
+
+    void timeout(String boundary) {
+      events.add("TIMEOUT boundary=" + boundary);
+    }
+
+    void disconnect(String reason) {
+      events.add("DISCONNECT reason=" + reason);
+    }
+
+    List<String> snapshot() {
+      return List.copyOf(events);
+    }
   }
 
   private byte[] receiveRaw() throws IOException {
