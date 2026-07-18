@@ -94,6 +94,11 @@ public final class BedrockConnectedPlayAdapter implements ConnectedFrameHandler 
     outbound.accept(ByteBuffer.wrap(session.encryptConnected(connected)));
   }
 
+  @Override
+  public void close() {
+    session.close();
+  }
+
   private BedrockPacketFrame framesForTyped(BedrockPlayPacket packet, BedrockPlayState state) {
     return frames.decode(playCodec.encode(packet, state, 0, 0));
   }

@@ -7,6 +7,7 @@ dependencies {
     implementation(project(":common"))
     implementation(project(":config"))
     implementation(project(":bedrock-registry-generator"))
+    implementation(project(":bedrock-codec"))
     implementation(project(":bedrock-session"))
     implementation(project(":bedrock-packets"))
     implementation(project(":packet-buffer"))

@@ -9,6 +9,8 @@ bridge.development-mode=false
 bridge.registry-path=C:/Users/example/.bedrockbridge/item-registry-748.ndjson
 bridge.registry-protocol-version=748
 bridge.registry-sha256=replace-with-local-artifact-sha256
+# Required for bridge.offline-auth-mode=deny: external official P-384 root public key.
+bridge.auth-trusted-root=C:/Users/example/.bedrockbridge/official-root.der
 bridge.offline-auth-mode=deny
 
 # Optional static named-upstream routing. The default listener mapping remains active.

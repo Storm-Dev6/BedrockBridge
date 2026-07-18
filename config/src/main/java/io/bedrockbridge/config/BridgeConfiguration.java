@@ -16,6 +16,7 @@ public record BridgeConfiguration(
     String registryPath,
     String registryProtocolVersion,
     String registrySha256,
+    String authTrustedRootPath,
     String offlineAuthMode,
     Map<String, JavaUpstreamDefinition> namedUpstreams,
     Map<Integer, String> listenerUpstreamNames) {
@@ -41,6 +42,7 @@ public record BridgeConfiguration(
         "",
         "",
         "",
+        "",
         "deny",
         Map.of(
             "default",
@@ -61,6 +63,7 @@ public record BridgeConfiguration(
     registryProtocolVersion = registryProtocolVersion == null ? "" : registryProtocolVersion.trim();
     registrySha256 =
         registrySha256 == null ? "" : registrySha256.trim().toLowerCase(java.util.Locale.ROOT);
+    authTrustedRootPath = authTrustedRootPath == null ? "" : authTrustedRootPath.trim();
     offlineAuthMode =
         Checks.notBlank(offlineAuthMode, "offlineAuthMode").toLowerCase(java.util.Locale.ROOT);
     if (!offlineAuthMode.equals("deny") && !offlineAuthMode.equals("allow-self-signed")) {

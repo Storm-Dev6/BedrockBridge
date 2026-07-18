@@ -40,6 +40,7 @@ public final class PropertiesConfigurationLoader implements ConfigurationLoader 
           optional(properties, "bridge.registry-path"),
           optional(properties, "bridge.registry-protocol-version"),
           optional(properties, "bridge.registry-sha256"),
+          optional(properties, "bridge.auth-trusted-root"),
           optionalOr(properties, "bridge.offline-auth-mode", "deny"),
           parseUpstreams(properties, upstreamAddress, upstreamPort),
           parseListenerMappings(properties, bindPort));
@@ -170,6 +171,7 @@ public final class PropertiesConfigurationLoader implements ConfigurationLoader 
             "bridge.registry-path",
             "bridge.registry-protocol-version",
             "bridge.registry-sha256",
+            "bridge.auth-trusted-root",
             "bridge.offline-auth-mode");
     for (Object keyObject : properties.keySet()) {
       String key = keyObject.toString();

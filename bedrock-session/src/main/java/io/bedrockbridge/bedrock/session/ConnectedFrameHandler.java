@@ -8,4 +8,7 @@ import java.util.function.Consumer;
 public interface ConnectedFrameHandler {
   /** Handles a read-only payload and may enqueue bounded connected payloads for the peer. */
   void handle(ByteBuffer payload, Consumer<ByteBuffer> outbound);
+
+  /** Releases session-scoped upstreams and cryptographic state. */
+  default void close() {}
 }

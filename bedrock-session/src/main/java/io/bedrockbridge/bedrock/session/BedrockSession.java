@@ -111,12 +111,14 @@ public final class BedrockSession {
       if (connected != null) {
         connected.disconnect(io.bedrockbridge.network.session.DisconnectReason.TIMEOUT);
       }
+      closeHandler();
       return;
     }
     if (connected != null) {
       connected.tick(now);
       if (connected.state() == io.bedrockbridge.network.session.SessionState.DISCONNECTED) {
         login.disconnect();
+        closeHandler();
       }
     }
   }
@@ -127,6 +129,7 @@ public final class BedrockSession {
     if (connected != null) {
       connected.disconnect(io.bedrockbridge.network.session.DisconnectReason.SERVER_SHUTDOWN);
     }
+    closeHandler();
   }
 
   /** Returns the peer endpoint. */
@@ -189,5 +192,11 @@ public final class BedrockSession {
     nextReliableIndex = io.bedrockbridge.network.core.UnsignedTriad.increment(nextReliableIndex);
     nextOrderIndex = io.bedrockbridge.network.core.UnsignedTriad.increment(nextOrderIndex);
     connected.tick(lastActivity);
+  }
+
+  private void closeHandler() {
+    if (connectedHandler != null) {
+      connectedHandler.close();
+    }
   }
 }
