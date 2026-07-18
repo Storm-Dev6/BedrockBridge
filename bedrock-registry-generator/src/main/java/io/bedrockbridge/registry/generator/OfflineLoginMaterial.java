@@ -53,7 +53,8 @@ public final class OfflineLoginMaterial {
         ByteBuffer.allocate(Integer.BYTES * 2 + chain.length + client.length)
             .order(ByteOrder.LITTLE_ENDIAN);
     request.putInt(chain.length).put(chain).putInt(client.length).put(client);
-    return new Generated(identity.getPublic(), chainToken, clientToken, request.array());
+    return new Generated(
+        identity.getPublic(), identity.getPrivate(), chainToken, clientToken, request.array());
   }
 
   /** Audits encoding, claims, signature format, key linkage, and verifies the generated request. */
@@ -165,25 +166,29 @@ public final class OfflineLoginMaterial {
     return signingInput + "." + url.encodeToString(signer.sign());
   }
 
-  /** Generated request and public-only audit material; private key is deliberately not retained. */
+  /** Generated request and transient handshake material; private key is never serialized. */
   public static final class Generated {
     private final java.security.PublicKey identityKey;
+    private final java.security.PrivateKey identityPrivateKey;
     private final String chainToken;
     private final String clientToken;
     private final byte[] connectionRequest;
 
     private Generated(
         java.security.PublicKey identityKey,
+        java.security.PrivateKey identityPrivateKey,
         String chainToken,
         String clientToken,
         byte[] connectionRequest) {
       if (identityKey == null
+          || identityPrivateKey == null
           || chainToken == null
           || clientToken == null
           || connectionRequest == null) {
         throw new NullPointerException("generated fields");
       }
       this.identityKey = identityKey;
+      this.identityPrivateKey = identityPrivateKey;
       this.chainToken = chainToken;
       this.clientToken = clientToken;
       this.connectionRequest = connectionRequest.clone();
@@ -191,6 +196,11 @@ public final class OfflineLoginMaterial {
 
     public java.security.PublicKey identityKey() {
       return identityKey;
+    }
+
+    /** Returns the transient private key needed only by the loopback client handshake. */
+    java.security.PrivateKey identityPrivateKey() {
+      return identityPrivateKey;
     }
 
     public String chainToken() {

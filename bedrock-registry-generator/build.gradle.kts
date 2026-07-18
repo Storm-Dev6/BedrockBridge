@@ -4,6 +4,7 @@ dependencies {
     implementation(project(":common"))
     implementation(project(":bedrock-auth"))
     implementation(project(":bedrock-codec"))
+    implementation(project(":bedrock-crypto"))
 }
 
 application { mainClass = "io.bedrockbridge.registry.generator.BdsProvenanceCli" }

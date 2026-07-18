@@ -3,6 +3,7 @@ package io.bedrockbridge.registry.generator;
 import io.bedrockbridge.bedrock.BedrockPlayState;
 import io.bedrockbridge.bedrock.BedrockProtocol;
 import io.bedrockbridge.bedrock.BedrockProtocolLimits;
+import io.bedrockbridge.bedrock.auth.JwtToken;
 import io.bedrockbridge.bedrock.codec.BedrockBatchCodec;
 import io.bedrockbridge.bedrock.codec.BedrockCompressionCodec;
 import io.bedrockbridge.bedrock.codec.BedrockDatagramCodec;
@@ -14,6 +15,8 @@ import io.bedrockbridge.bedrock.codec.BedrockPlayCodec;
 import io.bedrockbridge.bedrock.codec.BedrockProtocol748PacketRegistry;
 import io.bedrockbridge.bedrock.codec.CompressionAlgorithm;
 import io.bedrockbridge.bedrock.codec.CompressionSettings;
+import io.bedrockbridge.bedrock.crypto.BedrockKeyAgreement;
+import io.bedrockbridge.bedrock.crypto.BedrockSessionCipher;
 import io.bedrockbridge.bedrock.packet.ConnectionRequest;
 import io.bedrockbridge.bedrock.packet.ConnectionRequestAccepted;
 import io.bedrockbridge.bedrock.packet.NewIncomingConnection;
@@ -22,11 +25,13 @@ import io.bedrockbridge.bedrock.packet.OpenConnectionReply2;
 import io.bedrockbridge.bedrock.packet.OpenConnectionRequest1;
 import io.bedrockbridge.bedrock.packet.OpenConnectionRequest2;
 import io.bedrockbridge.bedrock.packet.play.BedrockPlayPacket;
+import io.bedrockbridge.bedrock.packet.play.ClientToServerHandshakePacket;
 import io.bedrockbridge.bedrock.packet.play.LoginPacket;
 import io.bedrockbridge.bedrock.packet.play.NetworkSettingsPacket;
 import io.bedrockbridge.bedrock.packet.play.RequestNetworkSettingsPacket;
 import io.bedrockbridge.bedrock.packet.play.ResourcePackClientResponsePacket;
 import io.bedrockbridge.bedrock.packet.play.ResourcePackResponse;
+import io.bedrockbridge.bedrock.packet.play.ServerToClientHandshakePacket;
 import io.bedrockbridge.network.raknet.AckCodec;
 import io.bedrockbridge.network.raknet.AckRange;
 import io.bedrockbridge.network.raknet.MtuPolicy;
@@ -44,11 +49,15 @@ import java.net.InetSocketAddress;
 import java.net.SocketTimeoutException;
 import java.nio.ByteBuffer;
 import java.nio.file.Path;
+import java.security.KeyFactory;
+import java.security.PublicKey;
+import java.security.spec.X509EncodedKeySpec;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Base64;
 import java.util.Deque;
 import java.util.List;
 
@@ -74,6 +83,7 @@ public final class BdsLoopbackProbe implements AutoCloseable {
   private int datagramSequence;
   private int reliableIndex;
   private int orderIndex;
+  private BedrockSessionCipher cipher;
 
   private BdsLoopbackProbe(InetSocketAddress server) throws IOException {
     if (!server.getAddress().isLoopbackAddress()) {
@@ -188,8 +198,7 @@ public final class BdsLoopbackProbe implements AutoCloseable {
           trace.disconnect("DISCONNECT_PACKET");
           throw new IOException("BDS disconnected the synthetic loopback client");
         } else if (packetId == 3) {
-          trace.state("ENCRYPTION_REQUESTED");
-          throw new IOException("BDS requested an encrypted online-mode handshake");
+          completeEncryptionHandshake(frame, playCodec, limits, compression, loginMaterial);
         }
       }
     }
@@ -260,7 +269,66 @@ public final class BdsLoopbackProbe implements AutoCloseable {
     byte[] connected = new byte[compressed.length + 1];
     connected[0] = (byte) GAME_PACKET;
     System.arraycopy(compressed, 0, connected, 1, compressed.length);
+    if (cipher != null) {
+      connected = cipher.encrypt(connected);
+    }
     sendConnected(connected);
+  }
+
+  private void completeEncryptionHandshake(
+      BedrockPacketFrame frame,
+      BedrockPlayCodec playCodec,
+      BedrockProtocolLimits limits,
+      BedrockCompressionCodec compression,
+      OfflineLoginMaterial.Generated loginMaterial)
+      throws IOException {
+    byte[] encoded = new BedrockPacketFrameCodec(limits).encode(frame);
+    BedrockPlayPacket decoded =
+        playCodec
+            .decode(encoded, BedrockPlayState.AUTHENTICATING, PacketDirection.CLIENTBOUND)
+            .packet();
+    if (!(decoded instanceof ServerToClientHandshakePacket handshake)) {
+      throw new IOException("Packet 3 did not decode as ServerToClientHandshake");
+    }
+    JwtToken token = JwtToken.parse(handshake.handshakeJwt());
+    PublicKey serverKey = decodePublicKey(token.header().get("x5u"));
+    token.verify(serverKey);
+    Object encodedSalt = token.claims().get("salt");
+    if (!(encodedSalt instanceof String saltText)) {
+      throw new IOException("ServerToClientHandshake is missing salt");
+    }
+    byte[] salt;
+    try {
+      salt = Base64.getDecoder().decode(saltText);
+    } catch (IllegalArgumentException invalid) {
+      throw new IOException("ServerToClientHandshake salt is not standard Base64", invalid);
+    }
+    if (salt.length != 16) {
+      throw new IOException("ServerToClientHandshake salt must be 16 bytes");
+    }
+    trace.state("ENCRYPTION_REQUESTED");
+    sendPlayPacket(
+        playCodec,
+        new ClientToServerHandshakePacket(),
+        BedrockPlayState.AUTHENTICATING,
+        limits,
+        compression);
+    cipher =
+        new BedrockSessionCipher(
+            salt, BedrockKeyAgreement.derive(loginMaterial.identityPrivateKey(), serverKey));
+    trace.state("ENCRYPTION_ACTIVE");
+  }
+
+  private static PublicKey decodePublicKey(Object encoded) throws IOException {
+    if (!(encoded instanceof String text) || text.isBlank()) {
+      throw new IOException("ServerToClientHandshake is missing x5u");
+    }
+    try {
+      return KeyFactory.getInstance("EC")
+          .generatePublic(new X509EncodedKeySpec(Base64.getDecoder().decode(text)));
+    } catch (java.security.GeneralSecurityException | IllegalArgumentException invalid) {
+      throw new IOException("ServerToClientHandshake x5u is not a valid EC public key", invalid);
+    }
   }
 
   private List<BedrockPacketFrame> receiveCompressedBatch(
@@ -366,17 +434,20 @@ public final class BdsLoopbackProbe implements AutoCloseable {
     Instant deadline = Instant.now().plusSeconds(30);
     while (Instant.now().isBefore(deadline)) {
       byte[] payload = receiveConnected();
-      if (payload != null && Byte.toUnsignedInt(payload[0]) == GAME_PACKET) {
-        return payload;
-      }
       if (payload != null) {
         if (Byte.toUnsignedInt(payload[0]) == 0 && payload.length == 9) {
           sendConnectedPong(payload);
           continue;
         }
+        if (cipher != null) {
+          payload = cipher.decrypt(payload);
+        }
+        if (payload.length > 0 && Byte.toUnsignedInt(payload[0]) == GAME_PACKET) {
+          return payload;
+        }
         trace.note(
             "IN_RAKNET_CONTROL id="
-                + Byte.toUnsignedInt(payload[0])
+                + (payload.length == 0 ? "<empty>" : Byte.toUnsignedInt(payload[0]))
                 + " payloadBytes="
                 + payload.length);
       }

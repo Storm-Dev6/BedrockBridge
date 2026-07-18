@@ -105,14 +105,19 @@ external work directory `C:\Users\Gamestormzone\Documents\BDS\work\phase5-loopba
 The probe completed RakNet negotiation and the protocol-748 NetworkSettings exchange, then sent a
 synthetic, locally signed Login request over the negotiated ZLIB connection. The trace proves
 `RequestNetworkSettings` (packet 193) sent and `NetworkSettings` (packet 143) received, followed by
-`Login` (packet 1) sent; no subsequent clientbound game packet arrived. Only RakNet ACK/control
-datagrams (IDs 192/132) arrived until the bounded timeout. No disconnect packet, encryption request,
-resource-pack packet, or BDS auth/error line was
-observed. The last proven boundary is therefore `LOGIN_SENT`, not a rejected packet reason. No
-StartGame frame was observed and no real registry artifact was created. The process was stopped
-after the attempt.
+`Login` (packet 1) sent; no subsequent clientbound game packet arrived. The latest repeat used the
+same unchanged BDS directory after the probe gained a bounded client-side handler for
+`ServerToClientHandshake` (packet 3): it verifies the server JWT, derives the P-384/AES session
+cipher, and can send `ClientToServerHandshake` (packet 4) if packet 3 is actually received. The
+repeat still received only RakNet ACK/control datagrams (IDs 192/132) until the bounded timeout;
+the 132 data frames carried RakNet keep-alive pings, which the probe answered. No PlayStatus,
+encryption request, resource-pack packet, disconnect packet, or BDS auth/error line was observed.
+The last proven boundary is therefore `LOGIN_SENT`, not a rejected packet reason. No StartGame frame
+was observed and no real registry artifact was created. The process was stopped after the attempt.
 
 This is an authentication/interop boundary, not permission to fabricate a packet or bypass BDS
 validation. The repository therefore contains only the observer, extractor, and synthetic tests;
-the three-field production registry remains absent and the next successful observation requires a
-valid, lawfully obtained Bedrock login flow or an explicit protocol decision.
+the three-field production registry remains absent. The next successful observation requires a
+valid, lawfully obtained Bedrock login chain accepted by this BDS instance. Sending packet 4 before
+packet 3, weakening chain verification, or treating the RakNet ping traffic as a StartGame response
+would be an invalid bypass.

@@ -489,3 +489,11 @@ The command prints protocol, artifact SHA-256, byte count, item count, `duplicat
 `missing-required` fields. `BridgeLauncher` invokes the same `RegistryCheckCli.validate` preflight
 before admitting a session or allowing the StartGame path. It never downloads BDS or stores the
 artifact in Gradle/CI outputs.
+
+The loopback generator now also handles the documented packet-3/packet-4 encryption boundary when
+an upstream sends it: the server handshake JWT is verified, the transient client P-384 key derives
+the session cipher, packet 4 is sent only after packet 3, and subsequent game batches are
+authenticated before decompression. The verified BDS 1.21.40.03 observation still stops at
+`LOGIN_SENT`; only RakNet keep-alive/ACK traffic follows the synthetic Login, so this capability is
+not evidence that BDS accepted the synthetic identity. A valid external Bedrock login chain remains
+required before a StartGame frame can be observed.
