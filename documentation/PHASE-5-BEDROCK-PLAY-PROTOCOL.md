@@ -251,8 +251,9 @@ performs the complete RakNet and NetworkSettings exchange and submits a syntheti
 No StartGame frame or production registry was therefore produced; the observer reports this
 authentication/interop boundary without bypassing BDS validation.
 
-The bounded diagnostic trace records RakNet handshake replies, NetworkSettings packet 143, Login
-packet 1, packet lengths, state transitions, and every subsequent RakNet datagram ID. After Login,
+The bounded diagnostic trace records RakNet handshake replies, RequestNetworkSettings packet 193,
+NetworkSettings packet 143, Login packet 1, packet lengths, state transitions, and every subsequent
+RakNet datagram ID. After Login,
 only ACK/control datagrams were received; there was no packet 3 encryption request, packet 5
 disconnect, resource-pack response, or StartGame packet. External BDS stdout/stderr was filtered
 to lifecycle/authentication keywords and contained no rejection reason. This leaves the exact BDS
