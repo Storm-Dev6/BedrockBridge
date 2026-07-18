@@ -224,6 +224,79 @@ class JavaWireCodecTest {
   }
 
   @Test
+  void decodesAttributesAndEntityEffectsWithProtocolBounds() throws Exception {
+    ByteArrayOutputStream attributes = new ByteArrayOutputStream();
+    DataOutputStream attributeData = new DataOutputStream(attributes);
+    JavaWireCodec.writeVarInt(attributes, 1);
+    JavaWireCodec.writeVarInt(attributes, 1);
+    JavaWireCodec.writeVarInt(attributes, 16);
+    attributeData.writeDouble(20.0);
+    JavaWireCodec.writeVarInt(attributes, 1);
+    writeString(attributes, "minecraft:test");
+    attributeData.writeDouble(0.5);
+    attributeData.writeByte(0);
+    JavaWirePacket.UpdateAttributes decodedAttributes =
+        (JavaWirePacket.UpdateAttributes)
+            JavaWireCodec.decode(JavaWireState.PLAY, 0x75, attributes.toByteArray());
+    assertEquals(1, decodedAttributes.entityId());
+    assertEquals(16, decodedAttributes.attributes().getFirst().id());
+    assertEquals(
+        "minecraft:test", decodedAttributes.attributes().getFirst().modifiers().getFirst().id());
+    assertEquals(0, decodedAttributes.attributes().getFirst().modifiers().getFirst().operation());
+
+    ByteArrayOutputStream effect = new ByteArrayOutputStream();
+    JavaWireCodec.writeVarInt(effect, 1);
+    JavaWireCodec.writeVarInt(effect, 1);
+    JavaWireCodec.writeVarInt(effect, 0);
+    JavaWireCodec.writeVarInt(effect, -1);
+    effect.write(0x07);
+    JavaWirePacket.EntityEffect decodedEffect =
+        (JavaWirePacket.EntityEffect)
+            JavaWireCodec.decode(JavaWireState.PLAY, 0x76, effect.toByteArray());
+    assertEquals(-1, decodedEffect.duration());
+    assertEquals(0x07, decodedEffect.flags());
+
+    ByteArrayOutputStream invalid = new ByteArrayOutputStream();
+    JavaWireCodec.writeVarInt(invalid, 1);
+    JavaWireCodec.writeVarInt(invalid, 1);
+    JavaWireCodec.writeVarInt(invalid, 16);
+    new DataOutputStream(invalid).writeDouble(Double.NaN);
+    assertThrows(
+        JavaWireException.class,
+        () -> JavaWireCodec.decode(JavaWireState.PLAY, 0x75, invalid.toByteArray()));
+  }
+
+  @Test
+  void decodesBundleDelimiterAndSpawnEntity() throws Exception {
+    assertEquals(
+        JavaWirePacket.BundleDelimiter.class,
+        JavaWireCodec.decode(JavaWireState.PLAY, 0x00, new byte[0]).getClass());
+    ByteArrayOutputStream spawn = new ByteArrayOutputStream();
+    DataOutputStream data = new DataOutputStream(spawn);
+    JavaWireCodec.writeVarInt(spawn, 7);
+    UUID uuid = new UUID(1L, 2L);
+    data.writeLong(uuid.getMostSignificantBits());
+    data.writeLong(uuid.getLeastSignificantBits());
+    JavaWireCodec.writeVarInt(spawn, 1);
+    data.writeDouble(1.0);
+    data.writeDouble(64.0);
+    data.writeDouble(-2.0);
+    data.writeByte(10);
+    data.writeByte(20);
+    data.writeByte(30);
+    JavaWireCodec.writeVarInt(spawn, 0);
+    data.writeShort(80);
+    data.writeShort(0);
+    data.writeShort(-80);
+    JavaWirePacket.SpawnEntity decoded =
+        (JavaWirePacket.SpawnEntity)
+            JavaWireCodec.decode(JavaWireState.PLAY, 0x01, spawn.toByteArray());
+    assertEquals(uuid, decoded.entityUuid());
+    assertEquals(64.0, decoded.y());
+    assertEquals((short) -80, decoded.velocityZ());
+  }
+
+  @Test
   void decodesRecipeBookCommandsAndOpaqueRecipesBoundedly() throws Exception {
     ByteArrayOutputStream recipeBook = new ByteArrayOutputStream();
     JavaWireCodec.writeVarInt(recipeBook, 0);

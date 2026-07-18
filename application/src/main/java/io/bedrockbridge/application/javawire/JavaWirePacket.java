@@ -24,6 +24,8 @@ public sealed interface JavaWirePacket
         JavaWirePacket.FinishConfiguration,
         JavaWirePacket.AcknowledgeFinishConfiguration,
         JavaWirePacket.PlayKeepAlive,
+        JavaWirePacket.BundleDelimiter,
+        JavaWirePacket.SpawnEntity,
         JavaWirePacket.PlayDisconnect,
         JavaWirePacket.SystemChat,
         JavaWirePacket.SynchronizePlayerPosition,
@@ -51,7 +53,9 @@ public sealed interface JavaWirePacket
         JavaWirePacket.LightUpdate,
         JavaWirePacket.SetChunkCacheRadius,
         JavaWirePacket.SetSimulationDistance,
-        JavaWirePacket.SetTime {
+        JavaWirePacket.SetTime,
+        JavaWirePacket.UpdateAttributes,
+        JavaWirePacket.EntityEffect {
   record Handshake(int protocolVersion, String host, int port, int nextState)
       implements JavaWirePacket {}
 
@@ -135,6 +139,24 @@ public sealed interface JavaWirePacket
   record AcknowledgeFinishConfiguration() implements JavaWirePacket {}
 
   record PlayKeepAlive(long payload) implements JavaWirePacket {}
+
+  record BundleDelimiter() implements JavaWirePacket {}
+
+  record SpawnEntity(
+      int entityId,
+      UUID entityUuid,
+      int type,
+      double x,
+      double y,
+      double z,
+      int pitch,
+      int yaw,
+      int headYaw,
+      int data,
+      short velocityX,
+      short velocityY,
+      short velocityZ)
+      implements JavaWirePacket {}
 
   record PlayDisconnect(JavaNbt reason) implements JavaWirePacket {
     public PlayDisconnect(String reasonJson) {
@@ -299,6 +321,24 @@ public sealed interface JavaWirePacket
   record SetSimulationDistance(int simulationDistance) implements JavaWirePacket {}
 
   record SetTime(long worldAge, long timeOfDay) implements JavaWirePacket {}
+
+  record UpdateAttributes(int entityId, java.util.List<Attribute> attributes)
+      implements JavaWirePacket {
+    public UpdateAttributes {
+      attributes = java.util.List.copyOf(attributes);
+    }
+  }
+
+  record Attribute(int id, double value, java.util.List<AttributeModifier> modifiers) {
+    public Attribute {
+      modifiers = java.util.List.copyOf(modifiers);
+    }
+  }
+
+  record AttributeModifier(String id, double amount, int operation) {}
+
+  record EntityEffect(int entityId, int effectId, int amplifier, int duration, int flags)
+      implements JavaWirePacket {}
 
   record LightData(
       java.util.List<Long> skyMask,

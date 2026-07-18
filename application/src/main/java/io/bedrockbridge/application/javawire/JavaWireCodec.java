@@ -282,6 +282,8 @@ public final class JavaWireCodec {
       throws IOException, JavaWireException {
     JavaWirePacket packet =
         switch (id) {
+          case 0x00 -> new JavaWirePacket.BundleDelimiter();
+          case 0x01 -> decodeSpawnEntity(in);
           case 0x2B -> decodePlayLogin(in);
           case 0x0B -> {
             int difficulty = in.readUnsignedByte();
@@ -361,6 +363,8 @@ public final class JavaWireCodec {
             yield new JavaWirePacket.SetSimulationDistance(distance);
           }
           case 0x64 -> new JavaWirePacket.SetTime(in.readLong(), in.readLong());
+          case 0x75 -> decodeUpdateAttributes(in);
+          case 0x76 -> decodeEntityEffect(in);
           default ->
               throw new JavaWireException(
                   "unsupported play packet id=0x" + Integer.toHexString(id));
@@ -749,6 +753,101 @@ public final class JavaWireCodec {
       values.add(readIdentifier(in, packetId, label));
     }
     return values;
+  }
+
+  private static JavaWirePacket.UpdateAttributes decodeUpdateAttributes(DataInputStream in)
+      throws IOException, JavaWireException {
+    int entityId = readVarInt(in);
+    int count = boundedCount(readVarInt(in), "attribute");
+    List<JavaWirePacket.Attribute> attributes = new ArrayList<>(count);
+    for (int index = 0; index < count; index++) {
+      int id = readVarInt(in);
+      if (id < 0 || id > 24) {
+        throw new JavaWireException("unsupported play packet id=0x75: unknown attribute id=" + id);
+      }
+      double value = in.readDouble();
+      if (!Double.isFinite(value)) {
+        throw new JavaWireException("unsupported play packet id=0x75: non-finite attribute value");
+      }
+      int modifierCount = boundedCount(readVarInt(in), "attribute modifier");
+      List<JavaWirePacket.AttributeModifier> modifiers = new ArrayList<>(modifierCount);
+      for (int modifier = 0; modifier < modifierCount; modifier++) {
+        String modifierId = readIdentifier(in, 0x75, "attribute modifier");
+        double amount = in.readDouble();
+        if (!Double.isFinite(amount)) {
+          throw new JavaWireException(
+              "unsupported play packet id=0x75: non-finite modifier amount");
+        }
+        int operation = in.readUnsignedByte();
+        if (operation > 2) {
+          throw new JavaWireException(
+              "unsupported play packet id=0x75: invalid modifier operation");
+        }
+        modifiers.add(new JavaWirePacket.AttributeModifier(modifierId, amount, operation));
+      }
+      attributes.add(new JavaWirePacket.Attribute(id, value, modifiers));
+    }
+    return new JavaWirePacket.UpdateAttributes(entityId, attributes);
+  }
+
+  private static JavaWirePacket.SpawnEntity decodeSpawnEntity(DataInputStream in)
+      throws IOException, JavaWireException {
+    int entityId = readVarInt(in);
+    UUID entityUuid = readUuid(in);
+    int type = readVarInt(in);
+    if (type < 0) {
+      throw new JavaWireException("unsupported play packet id=0x01: invalid entity type=" + type);
+    }
+    double x = in.readDouble();
+    double y = in.readDouble();
+    double z = in.readDouble();
+    if (!Double.isFinite(x) || !Double.isFinite(y) || !Double.isFinite(z)) {
+      throw new JavaWireException("unsupported play packet id=0x01: non-finite entity position");
+    }
+    int pitch = in.readUnsignedByte();
+    int yaw = in.readUnsignedByte();
+    int headYaw = in.readUnsignedByte();
+    int data = readVarInt(in);
+    short velocityX = in.readShort();
+    short velocityY = in.readShort();
+    short velocityZ = in.readShort();
+    return new JavaWirePacket.SpawnEntity(
+        entityId,
+        entityUuid,
+        type,
+        x,
+        y,
+        z,
+        pitch,
+        yaw,
+        headYaw,
+        data,
+        velocityX,
+        velocityY,
+        velocityZ);
+  }
+
+  private static JavaWirePacket.EntityEffect decodeEntityEffect(DataInputStream in)
+      throws IOException, JavaWireException {
+    int entityId = readVarInt(in);
+    int effectId = readVarInt(in);
+    if (effectId < 0 || effectId > 1024) {
+      throw new JavaWireException("unsupported play packet id=0x76: invalid effect id=" + effectId);
+    }
+    int amplifier = readVarInt(in);
+    if (amplifier < 0 || amplifier > 255) {
+      throw new JavaWireException(
+          "unsupported play packet id=0x76: invalid amplifier=" + amplifier);
+    }
+    int duration = readVarInt(in);
+    if (duration < -1) {
+      throw new JavaWireException("unsupported play packet id=0x76: invalid duration=" + duration);
+    }
+    int flags = in.readUnsignedByte();
+    if ((flags & ~0x0F) != 0) {
+      throw new JavaWireException("unsupported play packet id=0x76: invalid effect flags=" + flags);
+    }
+    return new JavaWirePacket.EntityEffect(entityId, effectId, amplifier, duration, flags);
   }
 
   private static int boundedByteLength(int length, String label) throws JavaWireException {
