@@ -3,7 +3,7 @@ package io.bedrockbridge.bedrock;
 import io.bedrockbridge.protocol.ProtocolVersion;
 import java.util.Arrays;
 
-/** Bedrock RakNet handshake constants and supported transport version. */
+/** Bedrock RakNet and Minecraft protocol constants supported by the bridge. */
 public final class BedrockProtocol {
   private static final byte[] OFFLINE_MESSAGE_MAGIC = {
     0x00,
@@ -33,6 +33,13 @@ public final class BedrockProtocol {
   /** Framework version identity for the handshake packet catalog. */
   public static final ProtocolVersion HANDSHAKE_VERSION =
       new ProtocolVersion("bedrock-raknet", "11", RAKNET_PROTOCOL_VERSION);
+
+  /** Minecraft Bedrock 1.21.40 network protocol published by Mojang as r/21_u4. */
+  public static final int NETWORK_PROTOCOL_748 = 748;
+
+  /** Exact framework identity for the first supported Bedrock play protocol. */
+  public static final ProtocolVersion PLAY_VERSION_748 =
+      new ProtocolVersion("minecraft-bedrock", "1.21.40", NETWORK_PROTOCOL_748);
 
   private BedrockProtocol() {}
 

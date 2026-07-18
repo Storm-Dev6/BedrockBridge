@@ -50,6 +50,44 @@ class ConfigurationTest {
         () -> new DefaultConfigurationValidator().validate(configuration));
   }
 
+  @Test
+  void loadsUnboundedNamedUpstreamsAndListenerMappings() throws IOException {
+    StringBuilder properties =
+        new StringBuilder(
+            """
+            bridge.application-name=BedrockBridge
+            bridge.bind-address=0.0.0.0
+            bridge.bind-port=19132
+            bridge.upstream-address=127.0.0.1
+            bridge.upstream-port=25565
+            bridge.maximum-sessions=100
+            bridge.scheduler-threads=2
+            bridge.development-mode=false
+            """);
+    for (int i = 1; i <= 7; i++) {
+      int javaPort = 25564 + i;
+      int bedrockPort = 19132 + i;
+      properties.append("bridge.upstream.server").append(i).append(".address=127.0.0.1\n");
+      properties
+          .append("bridge.upstream.server")
+          .append(i)
+          .append(".port=")
+          .append(javaPort)
+          .append("\n");
+      properties
+          .append("bridge.listener.")
+          .append(bedrockPort)
+          .append(".upstream=server")
+          .append(i)
+          .append("\n");
+    }
+    BridgeConfiguration configuration =
+        new PropertiesConfigurationLoader().load(write(properties.toString()));
+    assertEquals(8, configuration.namedUpstreams().size());
+    assertEquals(8, configuration.listenerUpstreamNames().size());
+    assertEquals("server6", configuration.listenerUpstreamNames().get(19138));
+  }
+
   private Path write(String contents) throws IOException {
     Path path = directory.resolve("bridge.properties");
     return Files.writeString(path, contents);

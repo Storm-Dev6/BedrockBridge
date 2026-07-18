@@ -2,12 +2,15 @@ package io.bedrockbridge.application;
 
 import io.bedrockbridge.api.BridgeStartedEvent;
 import io.bedrockbridge.api.BridgeStoppingEvent;
+import io.bedrockbridge.application.translation.JavaBedrockTranslator;
+import io.bedrockbridge.application.translation.JavaUpstreamConnection;
 import io.bedrockbridge.common.EventBus;
 import io.bedrockbridge.common.LifecycleException;
 import io.bedrockbridge.common.TaskScheduler;
 import io.bedrockbridge.config.BridgeConfiguration;
 import io.bedrockbridge.observability.BridgeMetrics;
 import io.bedrockbridge.observability.Logging;
+import java.io.IOException;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Objects;
@@ -23,6 +26,9 @@ public final class BedrockBridge implements AutoCloseable {
   private final TaskScheduler scheduler;
   private final BridgeMetrics metrics;
   private final Clock clock;
+  private final BedrockServerRuntime serverRuntime;
+  private final java.util.Set<JavaUpstreamConnection> upstreamConnections =
+      java.util.concurrent.ConcurrentHashMap.newKeySet();
   private final AtomicReference<LifecycleState> state = new AtomicReference<>(LifecycleState.NEW);
   private final CountDownLatch termination = new CountDownLatch(1);
 
@@ -33,11 +39,23 @@ public final class BedrockBridge implements AutoCloseable {
       TaskScheduler scheduler,
       BridgeMetrics metrics,
       Clock clock) {
+    this(configuration, eventBus, scheduler, metrics, clock, null);
+  }
+
+  /** Creates a bridge with an optional real Bedrock UDP runtime. */
+  public BedrockBridge(
+      BridgeConfiguration configuration,
+      EventBus eventBus,
+      TaskScheduler scheduler,
+      BridgeMetrics metrics,
+      Clock clock,
+      BedrockServerRuntime serverRuntime) {
     this.configuration = Objects.requireNonNull(configuration, "configuration");
     this.eventBus = Objects.requireNonNull(eventBus, "eventBus");
     this.scheduler = Objects.requireNonNull(scheduler, "scheduler");
     this.metrics = Objects.requireNonNull(metrics, "metrics");
     this.clock = Objects.requireNonNull(clock, "clock");
+    this.serverRuntime = serverRuntime;
   }
 
   /** Starts infrastructure exactly once and publishes the completion event. */
@@ -49,6 +67,9 @@ public final class BedrockBridge implements AutoCloseable {
     metrics.lifecycleState(1);
     try {
       state.set(LifecycleState.RUNNING);
+      if (serverRuntime != null) {
+        serverRuntime.start();
+      }
       metrics.recordStarted();
       eventBus.publish(new BridgeStartedEvent(Instant.now(clock)));
       LOGGER.info("{} infrastructure started", configuration.applicationName());
@@ -56,6 +77,9 @@ public final class BedrockBridge implements AutoCloseable {
       state.set(LifecycleState.FAILED);
       metrics.lifecycleState(5);
       scheduler.close();
+      if (serverRuntime != null) {
+        serverRuntime.close();
+      }
       throw new LifecycleException("Bridge startup failed", failure);
     }
   }
@@ -63,6 +87,34 @@ public final class BedrockBridge implements AutoCloseable {
   /** Returns the current lock-free lifecycle snapshot. */
   public LifecycleState state() {
     return state.get();
+  }
+
+  /** Opens and logs into the configured offline Java upstream for one Bedrock session. */
+  public JavaUpstreamConnection connectJavaUpstream(String username)
+      throws IOException, io.bedrockbridge.application.javawire.JavaWireException {
+    return connectJavaUpstream(configuration.bindPort(), username);
+  }
+
+  /** Opens the statically mapped Java upstream for a specific Bedrock listener port. */
+  public JavaUpstreamConnection connectJavaUpstream(int bedrockPort, String username)
+      throws IOException, io.bedrockbridge.application.javawire.JavaWireException {
+    String upstreamName = configuration.listenerUpstreamNames().get(bedrockPort);
+    if (upstreamName == null) {
+      throw new IllegalArgumentException(
+          "No Java upstream mapping for Bedrock port " + bedrockPort);
+    }
+    io.bedrockbridge.config.JavaUpstreamDefinition upstream =
+        configuration.namedUpstreams().get(upstreamName);
+    JavaUpstreamConnection connection =
+        JavaUpstreamConnection.loginOffline(
+            upstream.address(),
+            upstream.port(),
+            username,
+            upstream.connectTimeoutMillis(),
+            upstream.readTimeoutMillis(),
+            new JavaBedrockTranslator());
+    upstreamConnections.add(connection);
+    return connection;
   }
 
   /** Blocks the caller until shutdown completes while preserving interruption semantics. */
@@ -106,6 +158,17 @@ public final class BedrockBridge implements AutoCloseable {
         failure.addSuppressed(schedulerFailure);
       }
     } finally {
+      for (JavaUpstreamConnection connection : upstreamConnections) {
+        try {
+          connection.close();
+        } catch (IOException closeFailure) {
+          LOGGER.warn("Java upstream close failed", closeFailure);
+        }
+      }
+      upstreamConnections.clear();
+      if (serverRuntime != null) {
+        serverRuntime.close();
+      }
       state.set(LifecycleState.STOPPED);
       metrics.recordStopped();
       termination.countDown();

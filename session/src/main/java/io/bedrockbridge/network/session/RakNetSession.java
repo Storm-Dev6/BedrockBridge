@@ -105,6 +105,27 @@ public final class RakNetSession {
     }
   }
 
+  /** Dispatches one complete RakNet datagram, including DATA, ACK, and NACK envelopes. */
+  public synchronized void receiveDatagram(ByteBuffer input, Instant now) {
+    Objects.requireNonNull(input, "input");
+    Objects.requireNonNull(now, "now");
+    if (!input.hasRemaining()) {
+      disconnect(DisconnectReason.PROTOCOL_ERROR);
+      return;
+    }
+    int type = Byte.toUnsignedInt(input.get());
+    try {
+      switch (type) {
+        case 0x80 -> receiveData(input, now);
+        case 0xC0 -> acknowledge(ackCodec.decode(input), now);
+        case 0xA0 -> negativeAcknowledge(ackCodec.decode(input), now);
+        default -> disconnect(DisconnectReason.PROTOCOL_ERROR);
+      }
+    } catch (IllegalArgumentException | IllegalStateException failure) {
+      disconnect(DisconnectReason.PROTOCOL_ERROR);
+    }
+  }
+
   /** Applies ACK ranges to the reliable recovery queue. */
   public synchronized void acknowledge(List<AckRange> ranges, Instant now) {
     for (AckRange range : ranges) {

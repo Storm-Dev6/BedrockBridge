@@ -84,6 +84,17 @@ public final class BedrockChainVerifier {
     return new AuthenticatedLogin(identity, clientData.claims());
   }
 
+  /** Verifies a locally generated self-signed chain under an explicit offline policy. */
+  public AuthenticatedLogin verifyOfflineSelfSigned(BedrockLoginPayload payload) {
+    if (payload == null || payload.chain().isEmpty()) {
+      throw new BedrockValidationException("Offline login chain is empty");
+    }
+    JwtToken root = JwtToken.parse(payload.chain().getFirst());
+    PublicKey localRoot = publicKey(requiredString(root.header(), "x5u"));
+    return new BedrockChainVerifier(Set.of(localRoot), replayGuard, clock, clockSkew)
+        .verify(payload);
+  }
+
   private Instant validateTime(Map<String, Object> claims, Instant now) {
     long expirySeconds = requiredLong(claims, "exp");
     long notBeforeSeconds = requiredLong(claims, "nbf");
