@@ -13,7 +13,18 @@ import java.util.Map;
 public final class BdsProvenanceCli {
   private BdsProvenanceCli() {}
 
-  public static void main(String[] args) throws IOException {
+  public static void main(String[] args) throws Exception {
+    if (args.length > 0 && "--artifact".equals(args[0])) {
+      try {
+        RegistryCheckCli.main(args);
+      } catch (Exception failure) {
+        if (failure instanceof IOException ioFailure) {
+          throw ioFailure;
+        }
+        throw failure;
+      }
+      return;
+    }
     Map<String, String> options = parseOptions(args);
     Path input = Path.of(required(options, "--input"));
     Path output = Path.of(required(options, "--output"));

@@ -22,7 +22,21 @@ public sealed interface JavaWirePacket
         JavaWirePacket.UpdateTags,
         JavaWirePacket.ConfigurationPluginMessage,
         JavaWirePacket.FinishConfiguration,
-        JavaWirePacket.AcknowledgeFinishConfiguration {
+        JavaWirePacket.AcknowledgeFinishConfiguration,
+        JavaWirePacket.PlayKeepAlive,
+        JavaWirePacket.PlayDisconnect,
+        JavaWirePacket.SystemChat,
+        JavaWirePacket.SynchronizePlayerPosition,
+        JavaWirePacket.GameEvent,
+        JavaWirePacket.PlayPlayerAbilities,
+        JavaWirePacket.ChunkBatchStart,
+        JavaWirePacket.ChunkBatchFinished,
+        JavaWirePacket.ConfirmTeleportation,
+        JavaWirePacket.ChunkBatchReceived,
+        JavaWirePacket.SetPlayerPosition,
+        JavaWirePacket.SetPlayerPositionRotation,
+        JavaWirePacket.SetPlayerRotation,
+        JavaWirePacket.SetPlayerOnGround {
   record Handshake(int protocolVersion, String host, int port, int nextState)
       implements JavaWirePacket {}
 
@@ -104,4 +118,38 @@ public sealed interface JavaWirePacket
   record FinishConfiguration() implements JavaWirePacket {}
 
   record AcknowledgeFinishConfiguration() implements JavaWirePacket {}
+
+  record PlayKeepAlive(long payload) implements JavaWirePacket {}
+
+  record PlayDisconnect(String reasonJson) implements JavaWirePacket {}
+
+  record SystemChat(String contentJson, boolean overlay) implements JavaWirePacket {}
+
+  record SynchronizePlayerPosition(
+      double x, double y, double z, float yaw, float pitch, int flags, int teleportId)
+      implements JavaWirePacket {}
+
+  record GameEvent(int event, float value) implements JavaWirePacket {}
+
+  record PlayPlayerAbilities(byte flags, float flyingSpeed, float fieldOfViewModifier)
+      implements JavaWirePacket {}
+
+  record ChunkBatchStart() implements JavaWirePacket {}
+
+  record ChunkBatchFinished(int batchSize) implements JavaWirePacket {}
+
+  record ConfirmTeleportation(int teleportId) implements JavaWirePacket {}
+
+  record ChunkBatchReceived(float chunksPerTick) implements JavaWirePacket {}
+
+  record SetPlayerPosition(double x, double feetY, double z, boolean onGround)
+      implements JavaWirePacket {}
+
+  record SetPlayerPositionRotation(
+      double x, double feetY, double z, float yaw, float pitch, boolean onGround)
+      implements JavaWirePacket {}
+
+  record SetPlayerRotation(float yaw, float pitch, boolean onGround) implements JavaWirePacket {}
+
+  record SetPlayerOnGround(boolean onGround) implements JavaWirePacket {}
 }

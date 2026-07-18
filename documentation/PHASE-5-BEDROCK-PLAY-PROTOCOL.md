@@ -311,9 +311,19 @@ test; the registry is never downloaded by Gradle or CI.
 
 ### First remaining protocol boundary
 
-The transport reaches Java `PLAY` against the tested Paper 1.21.1 server. The next blocking state
-is the first Play packet, followed by StartGame construction on Bedrock; StartGame remains
+The transport reaches Java `PLAY` against the tested Paper 1.21.1 server. The PLAY codec now
+handles the verified protocol-767 keep-alive (`0x26`), disconnect (`0x1D`), game event (`0x22`),
+player abilities (`0x38`), synchronize-player-position (`0x40`), system chat (`0x6C`), and chunk
+batch lifecycle (`0x0C`/`0x0D`) packets. A position update is answered with Confirm Teleportation
+(`0x00`), and keep-alives are echoed with the serverbound PLAY ID (`0x18`). Unsupported PLAY
+packets fail closed with the exact hexadecimal packet ID; a bounded trace utility records packet
+order before that boundary without guessing fields. The first remaining Paper boundary is its
+full PLAY Login/chunk payload, followed by StartGame construction on Bedrock; StartGame remains
 fail-closed on `BLOCKED_EXTERNAL_OFFICIAL_ARTIFACT`.
+
+The synthetic socket harness proves PLAY packet ordering and the keep-alive/position response
+encoders. The opt-in Paper harness captures the first received PLAY IDs in order and records the
+first unsupported ID/reason, so a real server test never treats an unknown payload as decoded.
 
 ## Java Configuration verification
 
@@ -354,3 +364,16 @@ Java endpoint. There is no hardcoded seven-server limit; the example contains se
 upstreams (`lobby`, `survival`, `skyblock`, `creative`, `minigames`, `events`, `testing`) and seven
 additional Bedrock ports. The legacy single-upstream properties remain valid and create a `default`
 mapping automatically. Dynamic server selection is intentionally not part of this slice.
+
+## External registry check
+
+The registry import interface is `ExternalItemRegistryLoader`; its strict implementation accepts
+only the three-field NDJSON artifact, an exact protocol version, and a caller-supplied SHA-256.
+The artifact must remain outside the Git work-tree. Validate it offline with the generator module:
+
+```text
+./gradlew.bat --no-daemon :bedrock-registry-generator:run --args="--artifact C:/external/items-748.ndjson --protocol 748 --sha256 <64-lowercase-hex>"
+```
+
+The command prints only protocol, item count, byte count, and digest. It never downloads BDS or
+stores the artifact in Gradle/CI outputs.

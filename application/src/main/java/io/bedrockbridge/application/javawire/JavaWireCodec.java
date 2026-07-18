@@ -102,6 +102,32 @@ public final class JavaWireCodec {
         writeLong(out, p.payload());
       } else if (packet instanceof JavaWirePacket.KeepAlive p) {
         writeLong(out, p.payload());
+      } else if (packet instanceof JavaWirePacket.PlayKeepAlive p) {
+        writeLong(out, p.payload());
+      } else if (packet instanceof JavaWirePacket.ConfirmTeleportation p) {
+        writeVarInt(out, p.teleportId());
+      } else if (packet instanceof JavaWirePacket.ChunkBatchReceived p) {
+        writeFloat(out, p.chunksPerTick());
+      } else if (packet instanceof JavaWirePacket.PlayPlayerAbilities p) {
+        out.write(p.flags());
+      } else if (packet instanceof JavaWirePacket.SetPlayerPosition p) {
+        writeDouble(out, p.x());
+        writeDouble(out, p.feetY());
+        writeDouble(out, p.z());
+        out.write(p.onGround() ? 1 : 0);
+      } else if (packet instanceof JavaWirePacket.SetPlayerPositionRotation p) {
+        writeDouble(out, p.x());
+        writeDouble(out, p.feetY());
+        writeDouble(out, p.z());
+        writeFloat(out, p.yaw());
+        writeFloat(out, p.pitch());
+        out.write(p.onGround() ? 1 : 0);
+      } else if (packet instanceof JavaWirePacket.SetPlayerRotation p) {
+        writeFloat(out, p.yaw());
+        writeFloat(out, p.pitch());
+        out.write(p.onGround() ? 1 : 0);
+      } else if (packet instanceof JavaWirePacket.SetPlayerOnGround p) {
+        out.write(p.onGround() ? 1 : 0);
       } else if (packet instanceof JavaWirePacket.KnownPacks p) {
         writeVarInt(out, p.packs().size());
         for (JavaWirePacket.KnownPack pack : p.packs()) {
@@ -135,9 +161,10 @@ public final class JavaWireCodec {
         case LOGIN -> decodeLogin(packetId, in);
         case STATUS -> decodeStatus(packetId, in);
         case CONFIGURATION -> decodeConfiguration(packetId, in);
-        case HANDSHAKING, PLAY, CLOSED ->
+        case HANDSHAKING, CLOSED ->
             throw new JavaWireException(
                 "unsupported inbound packet state=" + state + " id=" + packetId);
+        case PLAY -> decodePlay(packetId, in);
       };
     } catch (IOException e) {
       throw new JavaWireException("malformed Java packet state=" + state + " id=" + packetId, e);
@@ -251,6 +278,41 @@ public final class JavaWireCodec {
     };
   }
 
+  private static JavaWirePacket decodePlay(int id, DataInputStream in)
+      throws IOException, JavaWireException {
+    JavaWirePacket packet =
+        switch (id) {
+          case 0x0C -> new JavaWirePacket.ChunkBatchFinished(readVarInt(in));
+          case 0x0D -> new JavaWirePacket.ChunkBatchStart();
+          case 0x1D -> new JavaWirePacket.PlayDisconnect(readString(in, 262144));
+          case 0x22 -> new JavaWirePacket.GameEvent(in.readUnsignedByte(), in.readFloat());
+          case 0x26 -> new JavaWirePacket.PlayKeepAlive(in.readLong());
+          case 0x38 ->
+              new JavaWirePacket.PlayPlayerAbilities(in.readByte(), in.readFloat(), in.readFloat());
+          case 0x40 ->
+              new JavaWirePacket.SynchronizePlayerPosition(
+                  in.readDouble(),
+                  in.readDouble(),
+                  in.readDouble(),
+                  in.readFloat(),
+                  in.readFloat(),
+                  in.readUnsignedByte(),
+                  readVarInt(in));
+          case 0x6C -> new JavaWirePacket.SystemChat(readString(in, 262144), in.readBoolean());
+          default ->
+              throw new JavaWireException(
+                  "unsupported play packet id=0x" + Integer.toHexString(id));
+        };
+    if (in.available() != 0) {
+      throw new JavaWireException(
+          "malformed play packet id=0x"
+              + Integer.toHexString(id)
+              + ": trailing bytes="
+              + in.available());
+    }
+    return packet;
+  }
+
   private static int boundedCount(int count, String label) throws JavaWireException {
     if (count < 0 || count > 65_536) {
       throw new JavaWireException("invalid " + label + " count=" + count);
@@ -335,6 +397,14 @@ public final class JavaWireCodec {
   private static void writeLong(OutputStream out, long value) throws IOException {
     DataOutputStream data = new DataOutputStream(out);
     data.writeLong(value);
+  }
+
+  private static void writeDouble(OutputStream out, double value) throws IOException {
+    new DataOutputStream(out).writeDouble(value);
+  }
+
+  private static void writeFloat(OutputStream out, float value) throws IOException {
+    new DataOutputStream(out).writeFloat(value);
   }
 
   private static long readLong(InputStream in) throws IOException {

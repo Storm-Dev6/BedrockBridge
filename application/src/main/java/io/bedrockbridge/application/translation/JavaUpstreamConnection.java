@@ -57,6 +57,13 @@ public final class JavaUpstreamConnection implements AutoCloseable {
     return translator.onJavaKeepAlive(payload);
   }
 
+  /** Pumps one Java PLAY packet and exposes only translator-approved Bedrock packets. */
+  public List<BedrockPlayPacket> pumpPlayOnce()
+      throws IOException, io.bedrockbridge.application.javawire.JavaWireException {
+    JavaWirePacket packet = transport.pumpPlayOnce();
+    return translator.onJavaPlayPacket(packet);
+  }
+
   @Override
   public void close() throws IOException {
     transport.close();

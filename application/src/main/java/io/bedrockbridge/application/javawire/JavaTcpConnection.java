@@ -5,6 +5,7 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.function.Consumer;
@@ -195,9 +196,75 @@ public final class JavaTcpConnection implements Closeable {
 
   private JavaWirePacket receive() throws IOException, JavaWireException {
     JavaWireCodec.Frame frame = JavaWireCodec.readFrame(input, compressionThreshold);
-    JavaWirePacket packet = JavaWireCodec.decode(state, frame.packetId(), frame.fields());
     eventSink.accept("java recv state=" + state + " id=0x" + Integer.toHexString(frame.packetId()));
+    try {
+      return JavaWireCodec.decode(state, frame.packetId(), frame.fields());
+    } catch (JavaWireException failure) {
+      eventSink.accept(
+          "java unsupported state="
+              + state
+              + " id=0x"
+              + Integer.toHexString(frame.packetId())
+              + " reason="
+              + failure.getMessage());
+      throw failure;
+    }
+  }
+
+  /** Reads and handles a bounded number of supported PLAY packets. */
+  public JavaWirePacket pumpPlayOnce() throws IOException, JavaWireException {
+    if (state != JavaWireState.PLAY) {
+      throw new JavaWireException("PLAY pump requires PLAY state, got " + state);
+    }
+    JavaWirePacket packet = receive();
+    if (packet instanceof JavaWirePacket.PlayKeepAlive keepAlive) {
+      send(0x18, keepAlive, JavaWireState.PLAY);
+    } else if (packet instanceof JavaWirePacket.SynchronizePlayerPosition position) {
+      send(0x00, new JavaWirePacket.ConfirmTeleportation(position.teleportId()), state);
+    } else if (packet instanceof JavaWirePacket.PlayDisconnect disconnect) {
+      throw new JavaUpstreamDisconnect(disconnect.reasonJson());
+    } else if (packet instanceof JavaWirePacket.ChunkBatchFinished finished) {
+      eventSink.accept("java play chunk-batch-finished size=" + finished.batchSize());
+    }
     return packet;
+  }
+
+  /** Captures packet IDs until the first unsupported PLAY packet without guessing its fields. */
+  public PlayTrace capturePlayPacketIds(int maxPackets) throws IOException, JavaWireException {
+    if (state != JavaWireState.PLAY) {
+      throw new JavaWireException("PLAY trace requires PLAY state, got " + state);
+    }
+    if (maxPackets < 1 || maxPackets > 4096) {
+      throw new IllegalArgumentException("maxPackets must be 1..4096");
+    }
+    List<Integer> ids = new ArrayList<>();
+    Integer unsupportedId = null;
+    String unsupportedReason = null;
+    for (int index = 0; index < maxPackets; index++) {
+      JavaWireCodec.Frame frame = JavaWireCodec.readFrame(input, compressionThreshold);
+      ids.add(frame.packetId());
+      eventSink.accept("java recv state=PLAY id=0x" + Integer.toHexString(frame.packetId()));
+      try {
+        JavaWireCodec.decode(JavaWireState.PLAY, frame.packetId(), frame.fields());
+      } catch (JavaWireException unsupported) {
+        unsupportedId = frame.packetId();
+        unsupportedReason = unsupported.getMessage();
+        eventSink.accept(
+            "java play unsupported id=0x"
+                + Integer.toHexString(frame.packetId())
+                + " reason="
+                + unsupportedReason);
+        break;
+      }
+    }
+    return new PlayTrace(ids, unsupportedId, unsupportedReason);
+  }
+
+  public record PlayTrace(
+      List<Integer> packetIds, Integer firstUnsupportedPacketId, String firstUnsupportedReason) {
+    public PlayTrace {
+      packetIds = List.copyOf(packetIds);
+    }
   }
 
   @Override

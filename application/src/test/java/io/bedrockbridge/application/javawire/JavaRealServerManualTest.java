@@ -1,6 +1,7 @@
 package io.bedrockbridge.application.javawire;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
@@ -17,6 +18,15 @@ class JavaRealServerManualTest {
       JavaWirePacket.LoginSuccess success = connection.loginOffline(host, port, "BedrockBridge");
       assertEquals("BedrockBridge", success.username());
       assertEquals(JavaWireState.PLAY, connection.state());
+      JavaTcpConnection.PlayTrace trace = connection.capturePlayPacketIds(32);
+      assertFalse(trace.packetIds().isEmpty());
+      System.out.println(
+          "Paper PLAY trace ids="
+              + trace.packetIds()
+              + " firstUnsupported="
+              + trace.firstUnsupportedPacketId()
+              + " reason="
+              + trace.firstUnsupportedReason());
     }
   }
 }

@@ -36,4 +36,16 @@ public final class JavaBedrockTranslator {
   public long onJavaKeepAlive(long payload) {
     return payload;
   }
+
+  /** Records supported PLAY observations; packet models are intentionally not synthesized. */
+  public List<BedrockPlayPacket> onJavaPlayPacket(JavaWirePacket packet) {
+    Objects.requireNonNull(packet, "packet");
+    if (packet instanceof JavaWirePacket.PlayDisconnect disconnect) {
+      return onJavaDisconnect(disconnect.reasonJson());
+    }
+    if (packet instanceof JavaWirePacket.PlayKeepAlive keepAlive) {
+      onJavaKeepAlive(keepAlive.payload());
+    }
+    return List.of();
+  }
 }

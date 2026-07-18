@@ -129,6 +129,50 @@ class JavaWireCodecTest {
         () -> JavaWireCodec.decode(JavaWireState.CONFIGURATION, 0x7F, new byte[0]));
   }
 
+  @Test
+  void decodesProtocol767PlayVerticalSlicePackets() throws Exception {
+    ByteArrayOutputStream keepAlive = new ByteArrayOutputStream();
+    new java.io.DataOutputStream(keepAlive).writeLong(42L);
+    assertEquals(
+        42L,
+        ((JavaWirePacket.PlayKeepAlive)
+                JavaWireCodec.decode(JavaWireState.PLAY, 0x26, keepAlive.toByteArray()))
+            .payload());
+
+    ByteArrayOutputStream position = new ByteArrayOutputStream();
+    java.io.DataOutputStream positionData = new java.io.DataOutputStream(position);
+    positionData.writeDouble(1.0);
+    positionData.writeDouble(2.0);
+    positionData.writeDouble(3.0);
+    positionData.writeFloat(90.0f);
+    positionData.writeFloat(-10.0f);
+    positionData.writeByte(0x10);
+    JavaWireCodec.writeVarInt(position, 7);
+    JavaWirePacket.SynchronizePlayerPosition decodedPosition =
+        (JavaWirePacket.SynchronizePlayerPosition)
+            JavaWireCodec.decode(JavaWireState.PLAY, 0x40, position.toByteArray());
+    assertEquals(7, decodedPosition.teleportId());
+    assertEquals(0x10, decodedPosition.flags());
+
+    ByteArrayOutputStream abilities = new ByteArrayOutputStream();
+    java.io.DataOutputStream abilityData = new java.io.DataOutputStream(abilities);
+    abilityData.writeByte(0x06);
+    abilityData.writeFloat(0.05f);
+    abilityData.writeFloat(0.1f);
+    assertEquals(
+        (byte) 0x06,
+        ((JavaWirePacket.PlayPlayerAbilities)
+                JavaWireCodec.decode(JavaWireState.PLAY, 0x38, abilities.toByteArray()))
+            .flags());
+
+    ByteArrayOutputStream encoded = new ByteArrayOutputStream();
+    encoded.write(
+        JavaWireCodec.encode(new JavaWirePacket.ConfirmTeleportation(7), JavaWireState.PLAY));
+    assertArrayEquals(new byte[] {7}, encoded.toByteArray());
+    assertThrows(
+        JavaWireException.class, () -> JavaWireCodec.decode(JavaWireState.PLAY, 0x2B, new byte[0]));
+  }
+
   private static void writeString(ByteArrayOutputStream output, String value) throws Exception {
     byte[] bytes = value.getBytes(UTF_8);
     JavaWireCodec.writeVarInt(output, bytes.length);

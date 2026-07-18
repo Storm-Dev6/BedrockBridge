@@ -32,7 +32,33 @@ class JavaTcpConnectionIntegrationTest {
     }
   }
 
+  @Test
+  void capturesPlayPacketOrderAndStopsAtUnsupportedPacket() throws Exception {
+    try (ServerSocket server = new ServerSocket(0)) {
+      ExecutorService executor = Executors.newSingleThreadExecutor();
+      Future<?> fixture = executor.submit(() -> serveWithPlayTrace(server));
+      try (JavaTcpConnection connection =
+          JavaTcpConnection.connect(
+              "127.0.0.1", server.getLocalPort(), 2_000, 2_000, ignored -> {})) {
+        connection.loginOffline("localhost", server.getLocalPort(), "Alex");
+        JavaTcpConnection.PlayTrace trace = connection.capturePlayPacketIds(8);
+        assertEquals(java.util.List.of(0x26, 0x22, 0x2B), trace.packetIds());
+        assertEquals(0x2B, trace.firstUnsupportedPacketId());
+      }
+      fixture.get();
+      executor.shutdownNow();
+    }
+  }
+
   private static void serve(ServerSocket server) {
+    serve(server, false);
+  }
+
+  private static void serveWithPlayTrace(ServerSocket server) {
+    serve(server, true);
+  }
+
+  private static void serve(ServerSocket server, boolean playTrace) {
     try (Socket socket = server.accept()) {
       JavaWireCodec.readFrame(socket.getInputStream(), -1);
       JavaWireCodec.readFrame(socket.getInputStream(), -1);
@@ -72,6 +98,16 @@ class JavaTcpConnectionIntegrationTest {
       JavaWireCodec.readFrame(socket.getInputStream(), -1);
       JavaWireCodec.readFrame(socket.getInputStream(), -1);
       JavaWireCodec.readFrame(socket.getInputStream(), -1);
+      if (playTrace) {
+        ByteArrayOutputStream keepAlive = new ByteArrayOutputStream();
+        new DataOutputStream(keepAlive).writeLong(42L);
+        JavaWireCodec.writePacket(socket.getOutputStream(), 0x26, keepAlive.toByteArray(), -1);
+        ByteArrayOutputStream gameEvent = new ByteArrayOutputStream();
+        new DataOutputStream(gameEvent).writeByte(1);
+        new DataOutputStream(gameEvent).writeFloat(0.5f);
+        JavaWireCodec.writePacket(socket.getOutputStream(), 0x22, gameEvent.toByteArray(), -1);
+        JavaWireCodec.writePacket(socket.getOutputStream(), 0x2B, new byte[0], -1);
+      }
     } catch (Exception failure) {
       throw new AssertionError(failure);
     }
