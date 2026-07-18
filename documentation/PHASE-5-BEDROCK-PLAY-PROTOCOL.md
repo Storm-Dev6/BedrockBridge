@@ -311,13 +311,9 @@ test; the registry is never downloaded by Gradle or CI.
 
 ### First remaining protocol boundary
 
-The transport reaches Java `PLAY` only for a server whose configuration stream is limited to the
-implemented known-packs, keep-alive, and finish-configuration packets. A normal vanilla/Paper
-1.21.1 server will next send additional configuration packets (notably registry data, feature
-flags, tags, and client information). These are intentionally rejected as unsupported rather than
-decoded from guessed fields. Consequently, the first remaining blocking state for a real server is
-the configuration registry-data/feature stream, followed by StartGame construction on Bedrock,
-which remains fail-closed on `BLOCKED_EXTERNAL_OFFICIAL_ARTIFACT`.
+The transport reaches Java `PLAY` against the tested Paper 1.21.1 server. The next blocking state
+is the first Play packet, followed by StartGame construction on Bedrock; StartGame remains
+fail-closed on `BLOCKED_EXTERNAL_OFFICIAL_ARTIFACT`.
 
 ## Java Configuration verification
 
@@ -330,9 +326,10 @@ tag kinds, and unknown packet IDs fail closed with the exact hexadecimal packet 
 The opt-in test `JavaRealServerManualTest` was run against the existing local Paper
 `paper-1.21.1-133.jar` (Java protocol 767) with `online-mode=false`, `server-port=25565`, and
 `enforce-secure-profile=true`. The server accepted the handshake and offline Login Start, then the
-bridge reached Configuration and sent Client Information. The first real server packet not yet
-implemented was Configuration packet `0x01` (clientbound plugin message); the test stopped there
-with `unsupported configuration packet id=0x01`. This is the current documented boundary; the
+bridge reached Configuration and sent Client Information. Configuration packet `0x01` (clientbound
+plugin message) is bounded and consumed; Registry Data, Feature Flags, Update Tags, keep-alive, and
+Finish Configuration also completed. The test reached Java `PLAY`, and the Paper log recorded the
+offline player joining and leaving normally. No unsupported packet was encountered in this run; the
 server process was stopped and its original `online-mode=true` setting restored afterward.
 
 For manual reproduction, temporarily set `online-mode=false` in the local Java server's

@@ -17,24 +17,18 @@ public final class JavaNbtCodec {
   private JavaNbtCodec() {}
 
   public static JavaNbt read(DataInputStream input) throws IOException, JavaWireException {
-    return readNamed(input, 0);
-  }
-
-  private static JavaNbt readNamed(DataInputStream input, int depth)
-      throws IOException, JavaWireException {
-    if (depth > MAX_DEPTH) {
-      throw new JavaWireException("NBT nesting exceeds " + MAX_DEPTH);
-    }
     int type = input.readUnsignedByte();
     if (type == 0) {
       return new JavaNbt.End();
     }
-    readString(input);
-    return readPayload(input, type, depth + 1);
+    return readPayload(input, type, 1);
   }
 
   private static JavaNbt readPayload(DataInputStream input, int type, int depth)
       throws IOException, JavaWireException {
+    if (depth > MAX_DEPTH) {
+      throw new JavaWireException("NBT nesting exceeds " + MAX_DEPTH);
+    }
     return switch (type) {
       case 1 -> new JavaNbt.ByteValue(input.readByte());
       case 2 -> new JavaNbt.ShortValue(input.readShort());

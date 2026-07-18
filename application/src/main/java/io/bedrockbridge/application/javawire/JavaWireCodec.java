@@ -207,6 +207,15 @@ public final class JavaWireCodec {
         }
         yield new JavaWirePacket.RegistryData(registryId, entries);
       }
+      case 0x01 -> {
+        String channel = readString(in, 32767);
+        int payloadBytes = in.available();
+        if (payloadBytes > 32_767) {
+          throw new JavaWireException("configuration plugin payload exceeds 32767 bytes");
+        }
+        in.skipBytes(payloadBytes);
+        yield new JavaWirePacket.ConfigurationPluginMessage(channel, payloadBytes);
+      }
       case 0x0C -> {
         int count = boundedCount(readVarInt(in), "feature flag");
         List<String> flags = new ArrayList<>();

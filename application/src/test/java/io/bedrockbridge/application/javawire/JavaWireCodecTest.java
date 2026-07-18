@@ -97,8 +97,6 @@ class JavaWireCodecTest {
     writeString(registry, "minecraft:overworld");
     registry.write(1);
     registry.write(10);
-    registry.write(0);
-    registry.write(0);
     registry.write(8);
     registry.write(0);
     registry.write(1);

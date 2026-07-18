@@ -52,6 +52,10 @@ class JavaTcpConnectionIntegrationTest {
       writeString(known, "core");
       writeString(known, "1.21");
       JavaWireCodec.writePacket(socket.getOutputStream(), 0x0E, known.toByteArray(), -1);
+      ByteArrayOutputStream plugin = new ByteArrayOutputStream();
+      writeString(plugin, "minecraft:brand");
+      plugin.write(new byte[] {1, 2, 3});
+      JavaWireCodec.writePacket(socket.getOutputStream(), 0x01, plugin.toByteArray(), -1);
       ByteArrayOutputStream registry = new ByteArrayOutputStream();
       writeString(registry, "minecraft:dimension_type");
       JavaWireCodec.writeVarInt(registry, 0);

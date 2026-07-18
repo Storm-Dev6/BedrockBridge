@@ -20,6 +20,7 @@ public sealed interface JavaWirePacket
         JavaWirePacket.RegistryData,
         JavaWirePacket.FeatureFlags,
         JavaWirePacket.UpdateTags,
+        JavaWirePacket.ConfigurationPluginMessage,
         JavaWirePacket.FinishConfiguration,
         JavaWirePacket.AcknowledgeFinishConfiguration {
   record Handshake(int protocolVersion, String host, int port, int nextState)
@@ -97,6 +98,8 @@ public sealed interface JavaWirePacket
       entries = java.util.List.copyOf(entries);
     }
   }
+
+  record ConfigurationPluginMessage(String channel, int payloadBytes) implements JavaWirePacket {}
 
   record FinishConfiguration() implements JavaWirePacket {}
 

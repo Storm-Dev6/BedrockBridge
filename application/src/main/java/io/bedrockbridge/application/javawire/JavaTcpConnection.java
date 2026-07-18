@@ -120,6 +120,13 @@ public final class JavaTcpConnection implements Closeable {
       } else if (packet instanceof JavaWirePacket.UpdateTags updateTags) {
         validateTags(updateTags);
         eventSink.accept("java configuration tag-registries=" + updateTags.registries().size());
+      } else if (packet instanceof JavaWirePacket.ConfigurationPluginMessage pluginMessage) {
+        validateIdentifier(pluginMessage.channel(), 0x01, "plugin channel");
+        eventSink.accept(
+            "java configuration plugin-channel="
+                + pluginMessage.channel()
+                + " bytes="
+                + pluginMessage.payloadBytes());
       } else if (packet instanceof JavaWirePacket.KeepAlive keepAlive) {
         send(0x04, new JavaWirePacket.KeepAlive(keepAlive.payload()), state);
       } else if (packet instanceof JavaWirePacket.FinishConfiguration) {
