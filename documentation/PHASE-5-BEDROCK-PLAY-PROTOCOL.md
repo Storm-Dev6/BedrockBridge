@@ -309,17 +309,44 @@ The repository integration harness uses real loopback TCP sockets and synthetic 
 fixtures. A real Bedrock client additionally requires the external registry and a manual client
 test; the registry is never downloaded by Gradle or CI.
 
+### Java PLAY Login and minimal world model
+
+Clientbound Java 1.21.1 protocol 767 Play Login (`0x2B`) is decoded with bounded counts,
+identifier validation, strict booleans, supported game-mode ranges, and the documented optional
+death location. The session retains entity ID, hardcore/debug/flat flags, dimension identifiers,
+player/view/simulation distances, respawn and secure-chat flags, current dimension, hashed seed,
+game mode, previous game mode, portal cooldown, and optional death location. Truncation, invalid
+ranges, malformed identifiers, and trailing bytes fail closed with the packet ID and reason. Field
+definitions are taken from the public [protocol 767 reference](https://wikivg.booky.dev/Protocol).
+
+`JavaWorldState` records the decoded login, default spawn, chunk-cache center, chunk-batch lifecycle,
+and known chunk coordinates. It does not synthesize block, biome, heightmap, light, or entity data.
+The first verified world-state packets are Set Chunk Cache Center (`0x54`), Set Default Spawn
+Position (`0x56`), Change Difficulty (`0x0B`), Entity Event (`0x1F`), Set Carried Item (`0x53`),
+and Server Data (`0x4B`, retaining only icon byte count and never icon bytes). Chunk payload decoding
+remains a separate bounded boundary.
+
 ### First remaining protocol boundary
 
-The transport reaches Java `PLAY` against the tested Paper 1.21.1 server. The PLAY codec now
-handles the verified protocol-767 keep-alive (`0x26`), disconnect (`0x1D`), game event (`0x22`),
-player abilities (`0x38`), synchronize-player-position (`0x40`), system chat (`0x6C`), and chunk
-batch lifecycle (`0x0C`/`0x0D`) packets. A position update is answered with Confirm Teleportation
-(`0x00`), and keep-alives are echoed with the serverbound PLAY ID (`0x18`). Unsupported PLAY
-packets fail closed with the exact hexadecimal packet ID; a bounded trace utility records packet
-order before that boundary without guessing fields. The first remaining Paper boundary is its
-full PLAY Login/chunk payload, followed by StartGame construction on Bedrock; StartGame remains
-fail-closed on `BLOCKED_EXTERNAL_OFFICIAL_ARTIFACT`.
+The transport reaches Java `PLAY` against the tested Paper 1.21.1 server. The verified trace of the
+first ten clientbound PLAY packet IDs is:
+
+`0x2B, 0x0B, 0x38, 0x53, 0x77, 0x1F, 0x41, 0x40, 0x4B, 0x6C`.
+
+In packet names, this is Play Login, Change Difficulty, Player Abilities, Set Carried Item,
+Update Recipes, Entity Event, Update Recipe Book, Synchronize Player Position, Server Data, and
+System Chat. The trace is from the local Paper `paper-1.21.1-133.jar` server (protocol 767,
+`online-mode=false`), and the first unsupported packet observed was `0x41` Update Recipe Book.
+
+The codec handles the bounded Play Login and the known keep-alive (`0x26`), disconnect (`0x1D`),
+game event (`0x22`), player abilities (`0x38`), synchronize-player-position (`0x40`), system chat
+(`0x6C` anonymous NBT component), world-state packets listed above, and chunk batch lifecycle
+(`0x0C`/`0x0D`). A position update is answered with Confirm Teleportation (`0x00`), and keep-alives
+are echoed with the serverbound PLAY ID (`0x18`). The first unsupported Paper packet is Update
+Recipe Book (`0x41`); its recipe-book payload is intentionally not guessed. Unsupported PLAY
+packets fail closed with the exact hexadecimal packet ID, while the trace utility records packet
+order without decoding unknown payloads. StartGame construction on Bedrock remains fail-closed on
+`BLOCKED_EXTERNAL_OFFICIAL_ARTIFACT`.
 
 The synthetic socket harness proves PLAY packet ordering and the keep-alive/position response
 encoders. The opt-in Paper harness captures the first received PLAY IDs in order and records the
@@ -354,6 +381,24 @@ The bridge properties must still include every required field from
 `application/src/main/resources/bridge.properties.example`, including an externally generated
 protocol-748 registry path, version, and SHA-256. CI never downloads or stores a Java server binary.
 
+### Manual Bedrock path
+
+The bridge can be exercised with a real Bedrock client only after a user-generated, validated
+protocol-748 registry is available outside the work-tree. Copy the example properties, set the
+Bedrock listener and Java upstream, point the registry path/protocol/digest at that external file,
+start Paper with `online-mode=false`, then run the fat JAR:
+
+```text
+java -jar application/build/libs/BedrockBridge-0.1.0-SNAPSHOT.jar path/to/bridge.properties
+```
+
+Connect the Bedrock client to the configured UDP listener. The expected path is Network Settings,
+Login/auth-chain validation, empty resource-pack exchange, Java upstream login/configuration/PLAY,
+and then the Bedrock StartGame gate. Without the external registry, the gate reports
+`BLOCKED_EXTERNAL_OFFICIAL_ARTIFACT` and no guessed item data is sent. The next required external
+input is therefore either that registry artifact or a real Bedrock-client observation; CI never
+downloads BDS or a Java server.
+
 ## Static multi-upstream routing
 
 Named upstream definitions use the unbounded `bridge.upstream.<name>.*` property namespace. Each
@@ -375,5 +420,5 @@ The artifact must remain outside the Git work-tree. Validate it offline with the
 ./gradlew.bat --no-daemon :bedrock-registry-generator:run --args="--artifact C:/external/items-748.ndjson --protocol 748 --sha256 <64-lowercase-hex>"
 ```
 
-The command prints only protocol, item count, byte count, and digest. It never downloads BDS or
-stores the artifact in Gradle/CI outputs.
+The command prints protocol, artifact SHA-256, byte count, item count, `duplicates`, and
+`missing-required` fields. It never downloads BDS or stores the artifact in Gradle/CI outputs.

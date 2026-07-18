@@ -282,9 +282,19 @@ public final class JavaWireCodec {
       throws IOException, JavaWireException {
     JavaWirePacket packet =
         switch (id) {
+          case 0x2B -> decodePlayLogin(in);
+          case 0x0B -> {
+            int difficulty = in.readUnsignedByte();
+            if (difficulty > 3) {
+              throw new JavaWireException("invalid difficulty=" + difficulty);
+            }
+            yield new JavaWirePacket.ChangeDifficulty(
+                difficulty, readBoolean(in, "difficulty lock"));
+          }
           case 0x0C -> new JavaWirePacket.ChunkBatchFinished(readVarInt(in));
           case 0x0D -> new JavaWirePacket.ChunkBatchStart();
-          case 0x1D -> new JavaWirePacket.PlayDisconnect(readString(in, 262144));
+          case 0x1D -> new JavaWirePacket.PlayDisconnect(JavaNbtCodec.read(in));
+          case 0x1F -> new JavaWirePacket.EntityEvent(in.readInt(), in.readByte());
           case 0x22 -> new JavaWirePacket.GameEvent(in.readUnsignedByte(), in.readFloat());
           case 0x26 -> new JavaWirePacket.PlayKeepAlive(in.readLong());
           case 0x38 ->
@@ -298,7 +308,32 @@ public final class JavaWireCodec {
                   in.readFloat(),
                   in.readUnsignedByte(),
                   readVarInt(in));
-          case 0x6C -> new JavaWirePacket.SystemChat(readString(in, 262144), in.readBoolean());
+          case 0x6C ->
+              new JavaWirePacket.SystemChat(
+                  JavaNbtCodec.read(in), readBoolean(in, "system chat overlay"));
+          case 0x54 -> new JavaWirePacket.SetChunkCacheCenter(readVarInt(in), readVarInt(in));
+          case 0x56 -> new JavaWirePacket.SetDefaultSpawnPosition(readPosition(in), in.readFloat());
+          case 0x53 -> {
+            int slot = in.readUnsignedByte();
+            if (slot > 8) {
+              throw new JavaWireException("invalid carried item slot=" + slot);
+            }
+            yield new JavaWirePacket.SetCarriedItem(slot);
+          }
+          case 0x4B -> {
+            JavaNbt motd = JavaNbtCodec.read(in);
+            int iconBytes = 0;
+            if (readBoolean(in, "server icon present")) {
+              iconBytes = readVarInt(in);
+              if (iconBytes < 0 || iconBytes > 1_048_576) {
+                throw new JavaWireException("invalid server icon length=" + iconBytes);
+              }
+              if (in.skipBytes(iconBytes) != iconBytes) {
+                throw new IOException("truncated server icon");
+              }
+            }
+            yield new JavaWirePacket.ServerData(motd, iconBytes);
+          }
           default ->
               throw new JavaWireException(
                   "unsupported play packet id=0x" + Integer.toHexString(id));
@@ -311,6 +346,114 @@ public final class JavaWireCodec {
               + in.available());
     }
     return packet;
+  }
+
+  private static JavaWirePacket.PlayLogin decodePlayLogin(DataInputStream in)
+      throws IOException, JavaWireException {
+    int entityId = in.readInt();
+    boolean hardcore = readBoolean(in, "hardcore");
+    int dimensionCount = boundedCount(readVarInt(in), "dimension name");
+    if (dimensionCount > 1024) {
+      throw new JavaWireException("invalid dimension name count=" + dimensionCount);
+    }
+    List<String> dimensions = new ArrayList<>();
+    for (int index = 0; index < dimensionCount; index++) {
+      dimensions.add(readIdentifier(in, 0x2B, "dimension name"));
+    }
+    int maxPlayers = readVarInt(in);
+    if (maxPlayers < 0 || maxPlayers > 1_000_000) {
+      throw new JavaWireException("invalid max players=" + maxPlayers);
+    }
+    int viewDistance = readVarInt(in);
+    int simulationDistance = readVarInt(in);
+    if (viewDistance < 2
+        || viewDistance > 32
+        || simulationDistance < 2
+        || simulationDistance > 32) {
+      throw new JavaWireException("invalid PLAY login distance values");
+    }
+    boolean reducedDebugInfo = readBoolean(in, "reduced debug info");
+    boolean enableRespawnScreen = readBoolean(in, "respawn screen");
+    boolean doLimitedCrafting = readBoolean(in, "limited crafting");
+    int dimensionType = readVarInt(in);
+    if (dimensionType < 0) {
+      throw new JavaWireException("invalid dimension type=" + dimensionType);
+    }
+    String dimensionName = readIdentifier(in, 0x2B, "current dimension");
+    long hashedSeed = in.readLong();
+    int gameMode = in.readUnsignedByte();
+    if (gameMode > 3) {
+      throw new JavaWireException("invalid game mode=" + gameMode);
+    }
+    int previousGameMode = in.readByte();
+    if (previousGameMode < -1 || previousGameMode > 3) {
+      throw new JavaWireException("invalid previous game mode=" + previousGameMode);
+    }
+    boolean debug = readBoolean(in, "debug world");
+    boolean flat = readBoolean(in, "flat world");
+    String deathDimensionName = null;
+    JavaWirePacket.BlockPosition deathLocation = null;
+    if (readBoolean(in, "death location present")) {
+      deathDimensionName = readIdentifier(in, 0x2B, "death dimension");
+      deathLocation = readPosition(in);
+    }
+    int portalCooldown = readVarInt(in);
+    if (portalCooldown < 0) {
+      throw new JavaWireException("invalid portal cooldown=" + portalCooldown);
+    }
+    boolean secureChat = readBoolean(in, "secure chat enforcement");
+    return new JavaWirePacket.PlayLogin(
+        entityId,
+        hardcore,
+        dimensions,
+        maxPlayers,
+        viewDistance,
+        simulationDistance,
+        reducedDebugInfo,
+        enableRespawnScreen,
+        doLimitedCrafting,
+        dimensionType,
+        dimensionName,
+        hashedSeed,
+        gameMode,
+        previousGameMode,
+        debug,
+        flat,
+        deathDimensionName,
+        deathLocation,
+        portalCooldown,
+        secureChat);
+  }
+
+  private static JavaWirePacket.BlockPosition readPosition(DataInputStream in) throws IOException {
+    long value = in.readLong();
+    int x = (int) (value >> 38);
+    int y = (int) (value << 52 >> 52);
+    int z = (int) (value << 26 >> 38);
+    return new JavaWirePacket.BlockPosition(x, y, z);
+  }
+
+  private static boolean readBoolean(DataInputStream in, String label)
+      throws IOException, JavaWireException {
+    int value = in.readUnsignedByte();
+    if (value > 1) {
+      throw new JavaWireException("invalid boolean " + label + "=" + value);
+    }
+    return value == 1;
+  }
+
+  private static String readIdentifier(DataInputStream in, int packetId, String label)
+      throws IOException, JavaWireException {
+    String identifier = readString(in, 32767);
+    if (!identifier.matches("[a-z0-9_.-]+:[a-z0-9_./-]+")) {
+      throw new JavaWireException(
+          "unsupported play packet id=0x"
+              + Integer.toHexString(packetId)
+              + ": invalid "
+              + label
+              + " identifier");
+    }
+    return identifier;
   }
 
   private static int boundedCount(int count, String label) throws JavaWireException {

@@ -36,7 +36,14 @@ public sealed interface JavaWirePacket
         JavaWirePacket.SetPlayerPosition,
         JavaWirePacket.SetPlayerPositionRotation,
         JavaWirePacket.SetPlayerRotation,
-        JavaWirePacket.SetPlayerOnGround {
+        JavaWirePacket.SetPlayerOnGround,
+        JavaWirePacket.PlayLogin,
+        JavaWirePacket.SetChunkCacheCenter,
+        JavaWirePacket.SetDefaultSpawnPosition,
+        JavaWirePacket.ChangeDifficulty,
+        JavaWirePacket.EntityEvent,
+        JavaWirePacket.SetCarriedItem,
+        JavaWirePacket.ServerData {
   record Handshake(int protocolVersion, String host, int port, int nextState)
       implements JavaWirePacket {}
 
@@ -121,9 +128,25 @@ public sealed interface JavaWirePacket
 
   record PlayKeepAlive(long payload) implements JavaWirePacket {}
 
-  record PlayDisconnect(String reasonJson) implements JavaWirePacket {}
+  record PlayDisconnect(JavaNbt reason) implements JavaWirePacket {
+    public PlayDisconnect(String reasonJson) {
+      this(new JavaNbt.StringValue(reasonJson));
+    }
 
-  record SystemChat(String contentJson, boolean overlay) implements JavaWirePacket {}
+    public String reasonJson() {
+      return reason.toString();
+    }
+  }
+
+  record SystemChat(JavaNbt content, boolean overlay) implements JavaWirePacket {
+    public SystemChat(String contentJson, boolean overlay) {
+      this(new JavaNbt.StringValue(contentJson), overlay);
+    }
+
+    public String contentJson() {
+      return content.toString();
+    }
+  }
 
   record SynchronizePlayerPosition(
       double x, double y, double z, float yaw, float pitch, int flags, int teleportId)
@@ -152,4 +175,45 @@ public sealed interface JavaWirePacket
   record SetPlayerRotation(float yaw, float pitch, boolean onGround) implements JavaWirePacket {}
 
   record SetPlayerOnGround(boolean onGround) implements JavaWirePacket {}
+
+  record BlockPosition(int x, int y, int z) {}
+
+  record PlayLogin(
+      int entityId,
+      boolean hardcore,
+      java.util.List<String> dimensionNames,
+      int maxPlayers,
+      int viewDistance,
+      int simulationDistance,
+      boolean reducedDebugInfo,
+      boolean enableRespawnScreen,
+      boolean doLimitedCrafting,
+      int dimensionType,
+      String dimensionName,
+      long hashedSeed,
+      int gameMode,
+      int previousGameMode,
+      boolean debug,
+      boolean flat,
+      String deathDimensionName,
+      BlockPosition deathLocation,
+      int portalCooldown,
+      boolean enforcesSecureChat)
+      implements JavaWirePacket {
+    public PlayLogin {
+      dimensionNames = java.util.List.copyOf(dimensionNames);
+    }
+  }
+
+  record SetChunkCacheCenter(int chunkX, int chunkZ) implements JavaWirePacket {}
+
+  record SetDefaultSpawnPosition(BlockPosition location, float angle) implements JavaWirePacket {}
+
+  record ChangeDifficulty(int difficulty, boolean locked) implements JavaWirePacket {}
+
+  record EntityEvent(int entityId, byte status) implements JavaWirePacket {}
+
+  record SetCarriedItem(int slot) implements JavaWirePacket {}
+
+  record ServerData(JavaNbt motd, int iconBytes) implements JavaWirePacket {}
 }

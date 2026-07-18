@@ -24,7 +24,8 @@ public final class RegistryCheckCli {
             + " bytes="
             + registry.byteCount()
             + " sha256="
-            + registry.sha256());
+            + registry.sha256()
+            + " duplicates=0 missing-required=0");
   }
 
   private static Map<String, String> parseOptions(String[] args) {

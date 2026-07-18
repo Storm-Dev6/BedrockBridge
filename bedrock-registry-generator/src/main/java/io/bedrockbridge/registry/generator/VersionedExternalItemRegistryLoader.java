@@ -68,6 +68,12 @@ public final class VersionedExternalItemRegistryLoader implements ExternalItemRe
         }
         Matcher matcher = LINE.matcher(line);
         if (!matcher.matches()) {
+          if (!line.contains("itemName")
+              || !line.contains("itemId")
+              || !line.contains("componentBased")) {
+            throw new ConfigurationException(
+                "External registry missing required fields at line " + lineNumber);
+          }
           throw new ConfigurationException(
               "External registry schema violation at line " + lineNumber);
         }

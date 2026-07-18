@@ -18,6 +18,8 @@ public final class JavaTcpConnection implements Closeable {
   private final java.io.OutputStream output;
   private int compressionThreshold = -1;
   private JavaWireState state = JavaWireState.HANDSHAKING;
+  private JavaWirePacket.PlayLogin playLogin;
+  private final JavaWorldState worldState = new JavaWorldState();
 
   private JavaTcpConnection(Socket socket, int readTimeoutMillis, Consumer<String> eventSink)
       throws IOException {
@@ -46,6 +48,16 @@ public final class JavaTcpConnection implements Closeable {
 
   public JavaWireState state() {
     return state;
+  }
+
+  /** Returns the decoded PLAY Login state, once received. */
+  public JavaWirePacket.PlayLogin playLogin() {
+    return playLogin;
+  }
+
+  /** Returns the bounded world-state model populated by supported PLAY packets. */
+  public JavaWorldState worldState() {
+    return worldState;
   }
 
   public JavaWirePacket.StatusResponse requestStatus(String host, int port)
@@ -198,7 +210,14 @@ public final class JavaTcpConnection implements Closeable {
     JavaWireCodec.Frame frame = JavaWireCodec.readFrame(input, compressionThreshold);
     eventSink.accept("java recv state=" + state + " id=0x" + Integer.toHexString(frame.packetId()));
     try {
-      return JavaWireCodec.decode(state, frame.packetId(), frame.fields());
+      JavaWirePacket packet = JavaWireCodec.decode(state, frame.packetId(), frame.fields());
+      if (packet instanceof JavaWirePacket.PlayLogin login) {
+        playLogin = login;
+      }
+      if (state == JavaWireState.PLAY) {
+        worldState.apply(packet);
+      }
+      return packet;
     } catch (JavaWireException failure) {
       eventSink.accept(
           "java unsupported state="
@@ -231,6 +250,17 @@ public final class JavaTcpConnection implements Closeable {
 
   /** Captures packet IDs until the first unsupported PLAY packet without guessing its fields. */
   public PlayTrace capturePlayPacketIds(int maxPackets) throws IOException, JavaWireException {
+    return capturePlayPacketIds(maxPackets, false);
+  }
+
+  /** Captures a bounded PLAY sequence while retaining frame boundaries across unknown packets. */
+  public PlayTrace capturePlayPacketIdsForTrace(int maxPackets)
+      throws IOException, JavaWireException {
+    return capturePlayPacketIds(maxPackets, true);
+  }
+
+  private PlayTrace capturePlayPacketIds(int maxPackets, boolean continueAfterUnsupported)
+      throws IOException, JavaWireException {
     if (state != JavaWireState.PLAY) {
       throw new JavaWireException("PLAY trace requires PLAY state, got " + state);
     }
@@ -245,7 +275,12 @@ public final class JavaTcpConnection implements Closeable {
       ids.add(frame.packetId());
       eventSink.accept("java recv state=PLAY id=0x" + Integer.toHexString(frame.packetId()));
       try {
-        JavaWireCodec.decode(JavaWireState.PLAY, frame.packetId(), frame.fields());
+        JavaWirePacket packet =
+            JavaWireCodec.decode(JavaWireState.PLAY, frame.packetId(), frame.fields());
+        if (packet instanceof JavaWirePacket.PlayLogin login) {
+          playLogin = login;
+        }
+        worldState.apply(packet);
       } catch (JavaWireException unsupported) {
         unsupportedId = frame.packetId();
         unsupportedReason = unsupported.getMessage();
@@ -254,7 +289,9 @@ public final class JavaTcpConnection implements Closeable {
                 + Integer.toHexString(frame.packetId())
                 + " reason="
                 + unsupportedReason);
-        break;
+        if (!continueAfterUnsupported) {
+          break;
+        }
       }
     }
     return new PlayTrace(ids, unsupportedId, unsupportedReason);

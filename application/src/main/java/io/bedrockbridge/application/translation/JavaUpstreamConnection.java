@@ -57,6 +57,11 @@ public final class JavaUpstreamConnection implements AutoCloseable {
     return translator.onJavaKeepAlive(payload);
   }
 
+  /** Exposes the bounded Java world state to the session translator. */
+  public io.bedrockbridge.application.javawire.JavaWorldState worldState() {
+    return transport.worldState();
+  }
+
   /** Pumps one Java PLAY packet and exposes only translator-approved Bedrock packets. */
   public List<BedrockPlayPacket> pumpPlayOnce()
       throws IOException, io.bedrockbridge.application.javawire.JavaWireException {

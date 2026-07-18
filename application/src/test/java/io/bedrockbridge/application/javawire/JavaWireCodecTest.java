@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.DataOutputStream;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -171,6 +172,55 @@ class JavaWireCodecTest {
     assertArrayEquals(new byte[] {7}, encoded.toByteArray());
     assertThrows(
         JavaWireException.class, () -> JavaWireCodec.decode(JavaWireState.PLAY, 0x2B, new byte[0]));
+  }
+
+  @Test
+  void decodesPlayLoginAndPopulatesWorldStateFields() throws Exception {
+    ByteArrayOutputStream fields = new ByteArrayOutputStream();
+    DataOutputStream data = new DataOutputStream(fields);
+    data.writeInt(42);
+    data.writeBoolean(true);
+    JavaWireCodec.writeVarInt(fields, 2);
+    writeString(fields, "minecraft:overworld");
+    writeString(fields, "minecraft:the_nether");
+    JavaWireCodec.writeVarInt(fields, 20);
+    JavaWireCodec.writeVarInt(fields, 10);
+    JavaWireCodec.writeVarInt(fields, 8);
+    data.writeBoolean(false);
+    data.writeBoolean(true);
+    data.writeBoolean(false);
+    JavaWireCodec.writeVarInt(fields, 0);
+    writeString(fields, "minecraft:overworld");
+    data.writeLong(123L);
+    data.writeByte(0);
+    data.writeByte(-1);
+    data.writeBoolean(false);
+    data.writeBoolean(false);
+    data.writeBoolean(false);
+    JavaWireCodec.writeVarInt(fields, 0);
+    data.writeBoolean(true);
+
+    JavaWirePacket.PlayLogin login =
+        (JavaWirePacket.PlayLogin)
+            JavaWireCodec.decode(JavaWireState.PLAY, 0x2B, fields.toByteArray());
+    assertEquals(42, login.entityId());
+    assertEquals(true, login.hardcore());
+    assertEquals(List.of("minecraft:overworld", "minecraft:the_nether"), login.dimensionNames());
+    assertEquals("minecraft:overworld", login.dimensionName());
+    assertEquals(123L, login.hashedSeed());
+    assertEquals(-1, login.previousGameMode());
+    assertEquals(true, login.enforcesSecureChat());
+
+    JavaWorldState world = new JavaWorldState();
+    world.apply(login);
+    world.apply(new JavaWirePacket.SetChunkCacheCenter(3, -2));
+    world.apply(
+        new JavaWirePacket.SetDefaultSpawnPosition(
+            new JavaWirePacket.BlockPosition(8, 64, 8), 90.0f));
+    assertEquals(login, world.login());
+    assertEquals(3, world.centerChunkX());
+    assertEquals(-2, world.centerChunkZ());
+    assertEquals(new JavaWirePacket.BlockPosition(8, 64, 8), world.defaultSpawn());
   }
 
   private static void writeString(ByteArrayOutputStream output, String value) throws Exception {
