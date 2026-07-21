@@ -15,7 +15,7 @@ import io.bedrockbridge.bedrock.codec.BedrockBatchCodec;
 import io.bedrockbridge.bedrock.codec.BedrockCompressionCodec;
 import io.bedrockbridge.bedrock.codec.BedrockPacketFrameCodec;
 import io.bedrockbridge.bedrock.codec.BedrockPlayCodec;
-import io.bedrockbridge.bedrock.codec.BedrockProtocol748PacketRegistry;
+import io.bedrockbridge.bedrock.codec.BedrockPlayCodecFactory;
 import io.bedrockbridge.bedrock.codec.CompressionAlgorithm;
 import io.bedrockbridge.bedrock.codec.CompressionSettings;
 import io.bedrockbridge.bedrock.crypto.HandshakeJwtSigner;
@@ -39,6 +39,15 @@ import org.junit.jupiter.api.Test;
 class BedrockConnectedPlayAdapterTest {
   @Test
   void dispatchesGameBatchThroughTypedSessionAndActivatesEncryptionBoundary() throws Exception {
+    assertConnectsThroughEncryptionBoundary(BedrockProtocol.NETWORK_PROTOCOL_748);
+  }
+
+  @Test
+  void negotiatesProtocol1001ThroughTheEncryptionBoundary() throws Exception {
+    assertConnectsThroughEncryptionBoundary(BedrockProtocol.NETWORK_PROTOCOL_1001);
+  }
+
+  private static void assertConnectsThroughEncryptionBoundary(int networkVersion) throws Exception {
     Instant now = Instant.parse("2026-07-18T08:00:00Z");
     OfflineLoginMaterial.Generated generated = OfflineLoginMaterial.generate(19132, now);
     BedrockProtocolLimits limits = BedrockProtocolLimits.defaults();
@@ -64,12 +73,9 @@ class BedrockConnectedPlayAdapterTest {
 
     byte[] settings =
         adapterInput(
-            new BedrockPlayCodec(
-                    BedrockProtocol.PLAY_VERSION_748,
-                    limits,
-                    BedrockProtocol748PacketRegistry.create(limits))
+            BedrockPlayCodecFactory.create(BedrockProtocol.playVersion(networkVersion), limits)
                 .encode(
-                    new RequestNetworkSettingsPacket(BedrockProtocol.NETWORK_PROTOCOL_748),
+                    new RequestNetworkSettingsPacket(networkVersion),
                     BedrockPlayState.NETWORK_SETTINGS,
                     0,
                     0),
@@ -80,15 +86,11 @@ class BedrockConnectedPlayAdapterTest {
     assertTrue(sent.getFirst().length > 1);
 
     BedrockPlayCodec codec =
-        new BedrockPlayCodec(
-            BedrockProtocol.PLAY_VERSION_748,
-            limits,
-            BedrockProtocol748PacketRegistry.create(limits));
+        BedrockPlayCodecFactory.create(BedrockProtocol.playVersion(networkVersion), limits);
     byte[] login =
         adapterInput(
             codec.encode(
-                new LoginPacket(
-                    BedrockProtocol.NETWORK_PROTOCOL_748, generated.connectionRequest()),
+                new LoginPacket(networkVersion, generated.connectionRequest()),
                 BedrockPlayState.LOGIN,
                 0,
                 0),

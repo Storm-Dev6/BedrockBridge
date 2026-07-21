@@ -3,6 +3,7 @@ package io.bedrockbridge.application.translation;
 import io.bedrockbridge.application.javawire.JavaUpstreamDisconnect;
 import io.bedrockbridge.application.javawire.JavaWireException;
 import io.bedrockbridge.application.javawire.JavaWorldState;
+import io.bedrockbridge.bedrock.BedrockPacketIds;
 import io.bedrockbridge.bedrock.BedrockPlayState;
 import io.bedrockbridge.bedrock.BedrockProtocol;
 import io.bedrockbridge.bedrock.BedrockProtocolLimits;
@@ -13,7 +14,7 @@ import io.bedrockbridge.bedrock.auth.BedrockIdentity;
 import io.bedrockbridge.bedrock.codec.BedrockPacketFrame;
 import io.bedrockbridge.bedrock.codec.BedrockPacketFrameCodec;
 import io.bedrockbridge.bedrock.codec.BedrockPlayCodec;
-import io.bedrockbridge.bedrock.codec.BedrockProtocol748PacketRegistry;
+import io.bedrockbridge.bedrock.codec.BedrockPlayCodecFactory;
 import io.bedrockbridge.bedrock.crypto.HandshakeJwtSigner;
 import io.bedrockbridge.bedrock.login.AuthenticationChallenge;
 import io.bedrockbridge.bedrock.login.BedrockAuthenticationSession;
@@ -29,6 +30,7 @@ import io.bedrockbridge.bedrock.packet.play.ResourcePackClientResponsePacket;
 import io.bedrockbridge.bedrock.packet.play.ResourcePackStackPacket;
 import io.bedrockbridge.bedrock.packet.play.ServerToClientHandshakePacket;
 import io.bedrockbridge.protocol.PacketDirection;
+import io.bedrockbridge.protocol.ProtocolVersion;
 import java.io.IOException;
 import java.security.SecureRandom;
 import java.util.ArrayList;
@@ -48,7 +50,7 @@ public final class BedrockJavaSession implements AutoCloseable {
   private AuthenticatedLogin authenticated;
   private AuthenticationChallenge challenge;
 
-  /** Creates a fail-closed session; a missing StartGame provider is an explicit external block. */
+  /** Creates a session; a missing StartGame provider rejects only the later spawn boundary. */
   public BedrockJavaSession(
       BedrockProtocolLimits limits,
       BedrockAuthenticationSession authentication,
@@ -62,7 +64,7 @@ public final class BedrockJavaSession implements AutoCloseable {
     frameCodec = new BedrockPacketFrameCodec(limits);
   }
 
-  /** Creates a session with the standard protocol-748 limits and a fresh online auth session. */
+  /** Creates a session with the standard Bedrock limits and a fresh online auth session. */
   public static BedrockJavaSession create(
       BedrockProtocolLimits limits,
       io.bedrockbridge.bedrock.auth.BedrockChainVerifier verifier,
@@ -97,7 +99,7 @@ public final class BedrockJavaSession implements AutoCloseable {
                 false,
                 List.of(),
                 List.of(),
-                BedrockProtocol.PLAY_VERSION_748.name(),
+                playState.protocolVersion().name(),
                 List.of(),
                 false,
                 false));
@@ -121,10 +123,7 @@ public final class BedrockJavaSession implements AutoCloseable {
     Objects.requireNonNull(encodedFrame, "encodedFrame");
     try {
       BedrockPlayCodec codec =
-          new BedrockPlayCodec(
-              BedrockProtocol.PLAY_VERSION_748,
-              limits,
-              BedrockProtocol748PacketRegistry.create(limits));
+          BedrockPlayCodecFactory.create(versionForFrame(encodedFrame), limits);
       return receive(
           codec.decode(encodedFrame, playState.state(), PacketDirection.SERVERBOUND).packet());
     } catch (RuntimeException failure) {
@@ -135,6 +134,11 @@ public final class BedrockJavaSession implements AutoCloseable {
   /** Returns the current state-machine state. */
   public synchronized BedrockPlayState state() {
     return playState.state();
+  }
+
+  /** Returns the exact negotiated Bedrock play protocol. */
+  public synchronized ProtocolVersion protocolVersion() {
+    return playState.protocolVersion();
   }
 
   /** Returns the verified Bedrock identity after Login has been accepted. */
@@ -223,11 +227,25 @@ public final class BedrockJavaSession implements AutoCloseable {
     return new AuthenticatedLogin(challenge.identity(), java.util.Map.of());
   }
 
+  private ProtocolVersion versionForFrame(byte[] encodedFrame) {
+    if (playState.state() != BedrockPlayState.NETWORK_SETTINGS) {
+      return playState.protocolVersion();
+    }
+    BedrockPacketFrame frame = frameCodec.decode(encodedFrame);
+    if (frame.header().packetId() != BedrockPacketIds.REQUEST_NETWORK_SETTINGS
+        || frame.payloadLength() != Integer.BYTES) {
+      throw new BedrockValidationException(
+          "RequestNetworkSettings must select the Bedrock play codec first");
+    }
+    return BedrockProtocol.playVersion(
+        frame.payload().order(java.nio.ByteOrder.BIG_ENDIAN).getInt());
+  }
+
   private BedrockSessionOutput sendStartGame() throws IOException {
     if (startGameProvider == null) {
-      throw new BedrockValidationException("BLOCKED_EXTERNAL_OFFICIAL_ARTIFACT");
+      throw new BedrockValidationException("START_GAME_UNAVAILABLE_EXTERNAL_REGISTRY");
     }
-    byte[] frame = startGameProvider.build(identity(), worldState());
+    byte[] frame = startGameProvider.build(playState.protocolVersion(), identity(), worldState());
     if (frame == null || frame.length == 0 || frame.length > limits.maximumPacketBytes()) {
       throw new BedrockValidationException("StartGame provider returned an invalid frame");
     }
@@ -241,8 +259,9 @@ public final class BedrockJavaSession implements AutoCloseable {
 
   private BedrockSessionOutput reject(Exception failure) {
     String message;
-    if (failure.getMessage() != null && failure.getMessage().startsWith("BLOCKED_EXTERNAL")) {
-      message = "BLOCKED_EXTERNAL_OFFICIAL_ARTIFACT";
+    if (failure.getMessage() != null
+        && failure.getMessage().startsWith("START_GAME_UNAVAILABLE_")) {
+      message = failure.getMessage();
     } else if (failure instanceof JavaUpstreamDisconnect disconnect) {
       message = disconnect.reasonJson();
     } else {
@@ -274,6 +293,8 @@ public final class BedrockJavaSession implements AutoCloseable {
 
   @FunctionalInterface
   public interface StartGameFrameProvider {
-    byte[] build(BedrockIdentity identity, JavaWorldState worldState) throws IOException;
+    byte[] build(
+        ProtocolVersion protocolVersion, BedrockIdentity identity, JavaWorldState worldState)
+        throws IOException;
   }
 }

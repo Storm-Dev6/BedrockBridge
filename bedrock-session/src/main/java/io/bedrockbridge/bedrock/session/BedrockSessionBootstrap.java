@@ -22,9 +22,12 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /** Routes offline and connected handshake payloads into bounded Bedrock sessions. */
 public final class BedrockSessionBootstrap implements AutoCloseable {
+  private static final Logger LOGGER = LoggerFactory.getLogger(BedrockSessionBootstrap.class);
   private final UdpTransport transport;
   private final BedrockDatagramCodec codec;
   private final Clock clock;
@@ -113,6 +116,8 @@ public final class BedrockSessionBootstrap implements AutoCloseable {
     if (closed.get()) {
       return;
     }
+    ByteBuffer observed = datagram.payload().duplicate();
+    int datagramType = observed.hasRemaining() ? Byte.toUnsignedInt(observed.get()) : -1;
     BedrockSession session = sessions.get(datagram.remoteAddress());
     if (session == null) {
       if (sessions.size() >= maximumSessions) {
@@ -121,13 +126,41 @@ public final class BedrockSessionBootstrap implements AutoCloseable {
       session =
           sessions.computeIfAbsent(
               datagram.remoteAddress(), address -> createSession(address, datagram.receivedAt()));
+      LOGGER.info(
+          "Bedrock endpoint admitted remote={} activeSessions={}",
+          datagram.remoteAddress(),
+          sessions.size());
     }
+    BedrockLoginState before = session.state();
+    LOGGER.info(
+        "Bedrock datagram remote={} type={} bytes={} state={}",
+        datagram.remoteAddress(),
+        datagramType < 0 ? "empty" : String.format("0x%02x", datagramType),
+        observed.remaining(),
+        before);
     try {
       session.receive(datagram.payload(), datagram.receivedAt());
     } catch (IllegalArgumentException failure) {
+      LOGGER.warn(
+          "Bedrock datagram rejected remote={} state={} reason={}",
+          datagram.remoteAddress(),
+          before,
+          safeMessage(failure));
       session.disconnect();
     }
+    if (before != session.state()) {
+      LOGGER.info(
+          "Bedrock state transition remote={} {} -> {}",
+          datagram.remoteAddress(),
+          before,
+          session.state());
+    }
     removeDisconnected(datagram.remoteAddress(), session);
+  }
+
+  private static String safeMessage(RuntimeException failure) {
+    String message = failure.getMessage();
+    return message == null || message.isBlank() ? failure.getClass().getSimpleName() : message;
   }
 
   /** Accepts a reassembled connected RakNet frame payload for an admitted endpoint. */

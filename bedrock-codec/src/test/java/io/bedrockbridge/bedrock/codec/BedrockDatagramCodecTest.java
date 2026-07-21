@@ -9,9 +9,11 @@ import io.bedrockbridge.bedrock.BedrockProtocol;
 import io.bedrockbridge.bedrock.BedrockValidationException;
 import io.bedrockbridge.bedrock.packet.OpenConnectionReply1;
 import io.bedrockbridge.bedrock.packet.OpenConnectionRequest1;
+import io.bedrockbridge.bedrock.packet.UnconnectedPong;
 import io.bedrockbridge.network.raknet.MtuPolicy;
 import io.bedrockbridge.protocol.PacketDirection;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import org.junit.jupiter.api.Test;
 
 class BedrockDatagramCodecTest {
@@ -40,6 +42,29 @@ class BedrockDatagramCodecTest {
     byte[] magic = new byte[16];
     encoded.get(magic);
     assertArrayEquals(BedrockProtocol.offlineMessageMagic(), magic);
+  }
+
+  @Test
+  void unconnectedPongUsesRakNetBigEndianMotdLength() {
+    ByteBuffer encoded = ByteBuffer.allocate(128);
+    codec.encode(new UnconnectedPong(0x0102030405060708L, 0x1112131415161718L, "MCPE;X"), encoded);
+    encoded.flip();
+
+    assertEquals(0x1C, Byte.toUnsignedInt(encoded.get()));
+    assertEquals(0x0102030405060708L, encoded.getLong());
+    assertEquals(0x1112131415161718L, encoded.getLong());
+    byte[] magic = new byte[BedrockProtocol.OFFLINE_MESSAGE_MAGIC_LENGTH];
+    encoded.get(magic);
+    assertArrayEquals(BedrockProtocol.offlineMessageMagic(), magic);
+    assertEquals(6, Short.toUnsignedInt(encoded.getShort()));
+    byte[] motd = new byte[6];
+    encoded.get(motd);
+    assertArrayEquals("MCPE;X".getBytes(StandardCharsets.UTF_8), motd);
+
+    encoded.rewind();
+    UnconnectedPong decoded =
+        assertInstanceOf(UnconnectedPong.class, codec.decode(encoded, PacketDirection.CLIENTBOUND));
+    assertEquals("MCPE;X", decoded.motd());
   }
 
   @Test

@@ -4,4 +4,5 @@ dependencies {
     api(project(":bedrock-login"))
     api(project(":network-core"))
     api(project(":session"))
+    api(libs.slf4j.api)
 }

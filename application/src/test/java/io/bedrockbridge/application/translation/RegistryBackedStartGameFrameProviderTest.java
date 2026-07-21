@@ -5,7 +5,9 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import io.bedrockbridge.application.javawire.JavaWirePacket;
 import io.bedrockbridge.application.javawire.JavaWorldState;
+import io.bedrockbridge.bedrock.BedrockProtocol;
 import io.bedrockbridge.bedrock.BedrockProtocolLimits;
+import io.bedrockbridge.bedrock.BedrockValidationException;
 import io.bedrockbridge.bedrock.auth.BedrockIdentity;
 import io.bedrockbridge.bedrock.codec.BedrockPacketFrame;
 import io.bedrockbridge.bedrock.codec.BedrockPacketFrameCodec;
@@ -58,12 +60,21 @@ class RegistryBackedStartGameFrameProviderTest {
             false));
     byte[] encoded =
         provider.build(
-            new BedrockIdentity(UUID.randomUUID(), "Player", "", "", keyPair.getPublic()), world);
+            BedrockProtocol.PLAY_VERSION_748,
+            new BedrockIdentity(UUID.randomUUID(), "Player", "", "", keyPair.getPublic()),
+            world);
     BedrockPacketFrame frame =
         new BedrockPacketFrameCodec(BedrockProtocolLimits.defaults()).decode(encoded);
     assertEquals(11, frame.header().packetId());
     assertEquals(0, frame.header().senderSubClientId());
     assertEquals(0, frame.header().targetSubClientId());
+    assertThrows(
+        BedrockValidationException.class,
+        () ->
+            provider.build(
+                BedrockProtocol.PLAY_VERSION_1001,
+                new BedrockIdentity(UUID.randomUUID(), "Player", "", "", keyPair.getPublic()),
+                world));
   }
 
   @Test

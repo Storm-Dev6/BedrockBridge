@@ -36,7 +36,6 @@ public final class BedrockPlayCodec {
             .find(version, packet.getClass())
             .orElseThrow(() -> malformed("Unknown Bedrock packet type"));
     if (!registration.states().contains(state)
-        || !packet.protocolVersion().equals(version)
         || packet.packetId() != registration.packetId()
         || packet.direction() != registration.direction()) {
       throw malformed("Bedrock packet metadata is invalid for the current state");
@@ -57,8 +56,7 @@ public final class BedrockPlayCodec {
             .find(version, state, direction, frame.header().packetId())
             .orElseThrow(() -> malformed("Unknown or state-invalid Bedrock packet"));
     BedrockPlayPacket packet = decodeRegistered(registration, frame.copyPayload());
-    if (!packet.protocolVersion().equals(version)
-        || packet.packetId() != registration.packetId()
+    if (packet.packetId() != registration.packetId()
         || packet.direction() != registration.direction()) {
       throw malformed("Decoded Bedrock packet metadata differs from its registration");
     }

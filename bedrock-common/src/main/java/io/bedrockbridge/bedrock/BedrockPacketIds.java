@@ -2,6 +2,7 @@ package io.bedrockbridge.bedrock;
 
 /** Stable RakNet and protocol-748 packet identifiers used by the Bedrock stack. */
 public final class BedrockPacketIds {
+  public static final int UNCONNECTED_PING = 0x01;
   public static final int CONNECTED_PING = 0x00;
   public static final int CONNECTED_PONG = 0x03;
   public static final int OPEN_CONNECTION_REQUEST_1 = 0x05;
@@ -12,6 +13,7 @@ public final class BedrockPacketIds {
   public static final int CONNECTION_REQUEST_ACCEPTED = 0x10;
   public static final int NEW_INCOMING_CONNECTION = 0x13;
   public static final int DISCONNECT_NOTIFICATION = 0x15;
+  public static final int UNCONNECTED_PONG = 0x1C;
 
   public static final int LOGIN = 1;
   public static final int PLAY_STATUS = 2;

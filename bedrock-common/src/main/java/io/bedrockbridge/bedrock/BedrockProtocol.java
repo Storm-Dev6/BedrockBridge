@@ -41,10 +41,31 @@ public final class BedrockProtocol {
   public static final ProtocolVersion PLAY_VERSION_748 =
       new ProtocolVersion("minecraft-bedrock", "1.21.40", NETWORK_PROTOCOL_748);
 
+  /** Minecraft Bedrock 26.30-26.33 network protocol published by Mojang as r/26_u3. */
+  public static final int NETWORK_PROTOCOL_1001 = 1001;
+
+  /** Exact framework identity for the current Bedrock r/26_u3 play protocol. */
+  public static final ProtocolVersion PLAY_VERSION_1001 =
+      new ProtocolVersion("minecraft-bedrock", "1.26.30", NETWORK_PROTOCOL_1001);
+
+  /** Version advertised during offline discovery when the client has not identified itself yet. */
+  public static final ProtocolVersion PREFERRED_PLAY_VERSION = PLAY_VERSION_1001;
+
   private BedrockProtocol() {}
 
   /** Returns a defensive copy of the offline message magic. */
   public static byte[] offlineMessageMagic() {
     return Arrays.copyOf(OFFLINE_MESSAGE_MAGIC, OFFLINE_MESSAGE_MAGIC.length);
+  }
+
+  /** Resolves an exact supported Bedrock network protocol or fails closed. */
+  public static ProtocolVersion playVersion(int networkProtocol) {
+    return switch (networkProtocol) {
+      case NETWORK_PROTOCOL_748 -> PLAY_VERSION_748;
+      case NETWORK_PROTOCOL_1001 -> PLAY_VERSION_1001;
+      default ->
+          throw new BedrockValidationException(
+              "Unsupported Bedrock network version: " + networkProtocol);
+    };
   }
 }

@@ -34,6 +34,22 @@ class BedrockPlayStateMachineTest {
   }
 
   @Test
+  void negotiatesProtocol1001AndRequiresLoginToUseTheSameVersion() {
+    var flow = new BedrockPlayStateMachine();
+
+    flow.receive(new RequestNetworkSettingsPacket(BedrockProtocol.NETWORK_PROTOCOL_1001));
+    assertEquals(BedrockProtocol.PLAY_VERSION_1001, flow.protocolVersion());
+    assertThrows(
+        BedrockValidationException.class,
+        () -> flow.receive(new LoginPacket(BedrockProtocol.NETWORK_PROTOCOL_748, new byte[] {1})));
+
+    var compatible = new BedrockPlayStateMachine();
+    compatible.receive(new RequestNetworkSettingsPacket(BedrockProtocol.NETWORK_PROTOCOL_1001));
+    compatible.receive(new LoginPacket(BedrockProtocol.NETWORK_PROTOCOL_1001, new byte[] {1}));
+    assertEquals(BedrockPlayState.AUTHENTICATING, compatible.state());
+  }
+
+  @Test
   void acceptsProgressForARealResourcePackBeforeTheStack() {
     var flow = authenticatedFlow();
 

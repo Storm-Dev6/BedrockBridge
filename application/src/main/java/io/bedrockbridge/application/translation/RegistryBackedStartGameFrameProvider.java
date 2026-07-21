@@ -2,12 +2,15 @@ package io.bedrockbridge.application.translation;
 
 import io.bedrockbridge.application.javawire.JavaWirePacket;
 import io.bedrockbridge.application.javawire.JavaWorldState;
+import io.bedrockbridge.bedrock.BedrockProtocol;
 import io.bedrockbridge.bedrock.BedrockProtocolLimits;
+import io.bedrockbridge.bedrock.BedrockValidationException;
 import io.bedrockbridge.bedrock.auth.BedrockIdentity;
 import io.bedrockbridge.bedrock.codec.BedrockBinaryWriter;
 import io.bedrockbridge.bedrock.codec.BedrockPacketFrame;
 import io.bedrockbridge.bedrock.codec.BedrockPacketFrameCodec;
 import io.bedrockbridge.bedrock.codec.BedrockPacketHeader;
+import io.bedrockbridge.protocol.ProtocolVersion;
 import io.bedrockbridge.registry.generator.ExternalItemRegistry;
 import io.bedrockbridge.registry.generator.ObservedItem;
 import java.io.IOException;
@@ -44,7 +47,14 @@ public final class RegistryBackedStartGameFrameProvider
   }
 
   @Override
-  public byte[] build(BedrockIdentity identity, JavaWorldState worldState) throws IOException {
+  public byte[] build(
+      ProtocolVersion protocolVersion, BedrockIdentity identity, JavaWorldState worldState)
+      throws IOException {
+    ProtocolVersion checkedProtocol = Objects.requireNonNull(protocolVersion, "protocolVersion");
+    if (!checkedProtocol.equals(BedrockProtocol.PLAY_VERSION_748)) {
+      throw new BedrockValidationException(
+          "START_GAME_UNAVAILABLE_PROTOCOL_" + checkedProtocol.protocolId() + "_REGISTRY");
+    }
     Objects.requireNonNull(identity, "identity");
     JavaWirePacket.PlayLogin login = Objects.requireNonNull(worldState, "worldState").login();
     if (login == null) {
