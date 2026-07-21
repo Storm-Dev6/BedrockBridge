@@ -32,6 +32,35 @@ For the default bridge advertisement, the resulting UTF-8 payload is 101 bytes, 
 length prefix is `00 65`. The full value is
 `MCPE;BedrockBridge;1001;1.26.33;0;100;<guid>;BedrockBridge;Survival;1;19132;19133;0;1;0;`.
 
+The RakNet server GUID is generated from the complete nonzero 64-bit value space on each bridge
+startup and is rendered as an unsigned decimal value in the advertisement. This matches repeated
+observations of the official server and prevents clients from retaining stale compatibility state
+under a process-independent fixed server identity.
+
+A subsequent phone trace still stopped at repeated discovery pings. Windows reported the listener
+as an IPv6 wildcard socket even though `bridge.bind-address=0.0.0.0` requested IPv4. The UDP
+transport now opens the configured protocol family explicitly, retains a datagram when a
+non-blocking send temporarily returns zero, and logs completed handshake transmissions. An
+isolated IPv4 probe verified a `127.0.0.1` listener, the complete 136-byte `0x1c` response, and a
+matching `UDP handshake datagram transmitted` record.
+
+The next real-client trace completed both offline connection requests and then sent a connected
+RakNet DATA datagram with flag byte `0x84`. DATA is a flag family (`0x80` through `0x9f` when the
+ACK/NACK bits are clear), not the single value `0x80`. Connected routing and session decoding now
+classify this family before processing the embedded connection request.
+
+After the RakNet connection reached `CONNECTED`, the client immediately sent a connected keepalive
+packet before its first Bedrock game batch. Connected control payloads such as `ConnectedPing` and
+`DisconnectNotification` are now decoded by the RakNet control state machine instead of being
+misclassified as `0xfe` game batches. A ping receives a framed `ConnectedPong` without disturbing
+the play session.
+
+After `NetworkSettings` enables compression, protocol-1001 batches carry a per-batch algorithm
+marker between the `0xfe` game-packet identifier and the batch body. Marker `0x00` selects ZLib and
+`0xff` identifies an uncompressed body. The initial `RequestNetworkSettings` exchange predates this
+boundary and remains untagged. Both inbound and outbound connected batches now preserve that
+transition explicitly.
+
 The protocol-1001 catalog covers the documented connection-control path:
 
 - RequestNetworkSettings and NetworkSettings;

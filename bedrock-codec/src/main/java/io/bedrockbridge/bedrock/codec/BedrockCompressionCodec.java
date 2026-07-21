@@ -2,6 +2,7 @@ package io.bedrockbridge.bedrock.codec;
 
 import io.bedrockbridge.bedrock.BedrockValidationException;
 import java.io.ByteArrayOutputStream;
+import java.util.Arrays;
 import java.util.Objects;
 import java.util.zip.DataFormatException;
 import java.util.zip.Deflater;
@@ -9,6 +10,8 @@ import java.util.zip.Inflater;
 
 /** Bounded zlib/no-compression codec that rejects truncated streams and compression bombs. */
 public final class BedrockCompressionCodec {
+  private static final int ZLIB_PACKET = 0x00;
+  private static final int UNCOMPRESSED_PACKET = 0xFF;
   private final CompressionSettings settings;
 
   /** Creates a codec for negotiated immutable settings. */
@@ -47,6 +50,21 @@ public final class BedrockCompressionCodec {
     }
   }
 
+  /** Encodes one post-negotiation batch with its per-packet compression algorithm marker. */
+  public byte[] compressPacket(byte[] payload) {
+    byte[] clear = Objects.requireNonNull(payload, "payload");
+    boolean useZlib =
+        settings.algorithm() == CompressionAlgorithm.ZLIB && clear.length >= settings.threshold();
+    byte[] body = useZlib ? compress(clear) : clear.clone();
+    if (body.length > settings.maximumCompressedBytes()) {
+      throw new BedrockValidationException("Packet payload exceeds compression limit");
+    }
+    byte[] encoded = new byte[body.length + 1];
+    encoded[0] = (byte) (useZlib ? ZLIB_PACKET : UNCOMPRESSED_PACKET);
+    System.arraycopy(body, 0, encoded, 1, body.length);
+    return encoded;
+  }
+
   /** Decompresses one complete zlib stream under absolute and ratio limits. */
   public byte[] decompress(byte[] compressed) {
     if (compressed.length == 0 || compressed.length > settings.maximumCompressedBytes()) {
@@ -83,5 +101,28 @@ public final class BedrockCompressionCodec {
     } finally {
       inflater.end();
     }
+  }
+
+  /** Decodes one post-negotiation batch selected by its per-packet algorithm marker. */
+  public byte[] decompressPacket(byte[] encoded) {
+    byte[] packet = Objects.requireNonNull(encoded, "encoded");
+    if (packet.length < 2 || packet.length > settings.maximumCompressedBytes() + 1L) {
+      throw new BedrockValidationException("Compressed packet size is invalid");
+    }
+    int algorithm = Byte.toUnsignedInt(packet[0]);
+    byte[] body = Arrays.copyOfRange(packet, 1, packet.length);
+    if (algorithm == ZLIB_PACKET) {
+      if (settings.algorithm() != CompressionAlgorithm.ZLIB) {
+        throw new BedrockValidationException("Zlib packet was not negotiated");
+      }
+      return decompress(body);
+    }
+    if (algorithm == UNCOMPRESSED_PACKET) {
+      if (body.length > settings.maximumDecompressedBytes()) {
+        throw new BedrockValidationException("Uncompressed packet exceeds limit");
+      }
+      return body;
+    }
+    throw new BedrockValidationException("Unsupported packet compression algorithm: " + algorithm);
   }
 }

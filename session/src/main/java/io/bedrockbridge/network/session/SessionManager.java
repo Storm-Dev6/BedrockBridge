@@ -4,6 +4,7 @@ import io.bedrockbridge.common.TaskScheduler;
 import io.bedrockbridge.network.core.Datagram;
 import io.bedrockbridge.network.core.UdpTransport;
 import io.bedrockbridge.network.raknet.AckCodec;
+import io.bedrockbridge.network.raknet.RakNetDatagramFlags;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.time.Clock;
@@ -18,7 +19,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 /** Lock-minimal endpoint-to-session router for up to a configured number of UDP peers. */
 public final class SessionManager implements ConnectionManager {
-  private static final int DATA = 0x80;
   private static final int ACK = 0xC0;
   private static final int NACK = 0xA0;
   private final UdpTransport transport;
@@ -57,7 +57,7 @@ public final class SessionManager implements ConnectionManager {
     }
     int type = Byte.toUnsignedInt(payload.get());
     RakNetSession session = sessions.get(datagram.remoteAddress());
-    if (session == null && type == DATA && sessions.size() < maximumSessions) {
+    if (session == null && RakNetDatagramFlags.isData(type) && sessions.size() < maximumSessions) {
       session =
           sessions.computeIfAbsent(
               datagram.remoteAddress(),
@@ -67,11 +67,14 @@ public final class SessionManager implements ConnectionManager {
       return;
     }
     try {
-      switch (type) {
-        case DATA -> session.receiveData(payload, datagram.receivedAt());
-        case ACK -> session.acknowledge(ackCodec.decode(payload), datagram.receivedAt());
-        case NACK -> session.negativeAcknowledge(ackCodec.decode(payload), datagram.receivedAt());
-        default -> session.disconnect(DisconnectReason.PROTOCOL_ERROR);
+      if (RakNetDatagramFlags.isData(type)) {
+        session.receiveData(payload, datagram.receivedAt());
+      } else {
+        switch (type) {
+          case ACK -> session.acknowledge(ackCodec.decode(payload), datagram.receivedAt());
+          case NACK -> session.negativeAcknowledge(ackCodec.decode(payload), datagram.receivedAt());
+          default -> session.disconnect(DisconnectReason.PROTOCOL_ERROR);
+        }
       }
     } catch (IllegalArgumentException failure) {
       session.disconnect(DisconnectReason.PROTOCOL_ERROR);

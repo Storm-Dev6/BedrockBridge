@@ -8,7 +8,9 @@ import io.bedrockbridge.network.core.Datagram;
 import io.bedrockbridge.network.core.DatagramHandler;
 import io.bedrockbridge.network.core.UdpTransport;
 import java.io.IOException;
+import java.net.Inet6Address;
 import java.net.InetSocketAddress;
+import java.net.StandardProtocolFamily;
 import java.nio.ByteBuffer;
 import java.nio.channels.DatagramChannel;
 import java.nio.channels.SelectionKey;
@@ -19,11 +21,15 @@ import java.util.Objects;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /** Single-selector, non-blocking UDP transport with a bounded multi-producer send queue. */
 public final class NioUdpTransport implements UdpTransport {
+  private static final Logger LOGGER = LoggerFactory.getLogger(NioUdpTransport.class);
   private final DatagramChannel channel;
   private final Selector selector;
+  private final SelectionKey channelKey;
   private final PacketBufferPool bufferPool;
   private final int maximumDatagramSize;
   private final ArrayBlockingQueue<OutboundDatagram> outbound;
@@ -31,6 +37,7 @@ public final class NioUdpTransport implements UdpTransport {
   private final AtomicBoolean started = new AtomicBoolean();
   private final AtomicBoolean running = new AtomicBoolean();
   private final CountDownLatch stopped = new CountDownLatch(1);
+  private OutboundDatagram pending;
 
   /** Opens and binds a transport; no thread starts until {@link #start(DatagramHandler)}. */
   public NioUdpTransport(
@@ -48,10 +55,14 @@ public final class NioUdpTransport implements UdpTransport {
     outbound = new ArrayBlockingQueue<>(sendQueueCapacity);
     try {
       selector = Selector.open();
-      channel = DatagramChannel.open();
+      channel =
+          DatagramChannel.open(
+              bindAddress.getAddress() instanceof Inet6Address
+                  ? StandardProtocolFamily.INET6
+                  : StandardProtocolFamily.INET);
       channel.configureBlocking(false);
       channel.bind(bindAddress);
-      channel.register(selector, SelectionKey.OP_READ);
+      channelKey = channel.register(selector, SelectionKey.OP_READ);
     } catch (IOException failure) {
       throw new LifecycleException("Unable to bind UDP transport to " + bindAddress, failure);
     }
@@ -125,9 +136,31 @@ public final class NioUdpTransport implements UdpTransport {
   }
 
   private void flushSends() throws IOException {
-    OutboundDatagram datagram;
-    while ((datagram = outbound.poll()) != null) {
-      channel.send(ByteBuffer.wrap(datagram.payload), datagram.remoteAddress);
+    while (true) {
+      if (pending == null) {
+        pending = outbound.poll();
+      }
+      if (pending == null) {
+        channelKey.interestOps(SelectionKey.OP_READ);
+        return;
+      }
+      int sent = channel.send(ByteBuffer.wrap(pending.payload), pending.remoteAddress);
+      if (sent == 0) {
+        channelKey.interestOps(SelectionKey.OP_READ | SelectionKey.OP_WRITE);
+        return;
+      }
+      if (sent != pending.payload.length) {
+        throw new IOException("UDP channel reported a partial datagram transmission");
+      }
+      int datagramType = Byte.toUnsignedInt(pending.payload[0]);
+      if (datagramType < 0x80) {
+        LOGGER.info(
+            "UDP handshake datagram transmitted remote={} type={} bytes={}",
+            pending.remoteAddress,
+            String.format("0x%02x", datagramType),
+            sent);
+      }
+      pending = null;
     }
   }
 

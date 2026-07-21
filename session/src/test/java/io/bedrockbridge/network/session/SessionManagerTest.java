@@ -37,7 +37,7 @@ class SessionManagerTest {
                 scheduler,
                 Duration.ofMillis(10))) {
       InetSocketAddress remote = new InetSocketAddress(InetAddress.getLoopbackAddress(), 19132);
-      transport.receive(remote, ByteBuffer.wrap(new byte[] {(byte) 0x80, 0, 0, 0}));
+      transport.receive(remote, ByteBuffer.wrap(new byte[] {(byte) 0x84, 0, 0, 0}));
       assertEquals(1, manager.sessions().size());
       Thread.sleep(100);
       assertTrue(manager.sessions().isEmpty());

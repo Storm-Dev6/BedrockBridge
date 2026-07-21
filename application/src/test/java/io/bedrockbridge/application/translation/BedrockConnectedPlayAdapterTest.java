@@ -79,7 +79,8 @@ class BedrockConnectedPlayAdapterTest {
                     BedrockPlayState.NETWORK_SETTINGS,
                     0,
                     0),
-            limits);
+            limits,
+            false);
     adapter.handle(ByteBuffer.wrap(settings), value -> sent.add(copy(value)));
     assertEquals(BedrockPlayState.LOGIN, session.state());
     assertFalse(sent.isEmpty());
@@ -94,7 +95,8 @@ class BedrockConnectedPlayAdapterTest {
                 BedrockPlayState.LOGIN,
                 0,
                 0),
-            limits);
+            limits,
+            true);
     adapter.handle(ByteBuffer.wrap(login), value -> sent.add(copy(value)));
     assertEquals(BedrockPlayState.AUTHENTICATING, session.state());
     assertTrue(sent.size() >= 2);
@@ -103,25 +105,27 @@ class BedrockConnectedPlayAdapterTest {
         adapterInput(
             codec.encode(
                 new ClientToServerHandshakePacket(), BedrockPlayState.AUTHENTICATING, 0, 0),
-            limits);
+            limits,
+            true);
     adapter.handle(ByteBuffer.wrap(handshake), value -> sent.add(copy(value)));
     assertTrue(session.encryptionActive());
     assertTrue(sent.getLast().length > 1);
   }
 
-  private static byte[] adapterInput(byte[] frame, BedrockProtocolLimits limits) {
+  private static byte[] adapterInput(
+      byte[] frame, BedrockProtocolLimits limits, boolean compressionActive) {
     byte[] batch =
         new BedrockBatchCodec(limits)
             .encode(List.of(new BedrockPacketFrameCodec(limits).decode(frame)));
-    byte[] compressed =
+    BedrockCompressionCodec compression =
         new BedrockCompressionCodec(
-                new CompressionSettings(
-                    CompressionAlgorithm.ZLIB,
-                    512,
-                    limits.maximumConnectedPayloadBytes(),
-                    limits.maximumDecompressedBatchBytes(),
-                    limits.maximumCompressionRatio()))
-            .compress(batch);
+            new CompressionSettings(
+                CompressionAlgorithm.ZLIB,
+                512,
+                limits.maximumConnectedPayloadBytes(),
+                limits.maximumDecompressedBatchBytes(),
+                limits.maximumCompressionRatio()));
+    byte[] compressed = compressionActive ? compression.compressPacket(batch) : batch;
     byte[] connected = new byte[compressed.length + 1];
     connected[0] = (byte) 0xFE;
     System.arraycopy(compressed, 0, connected, 1, compressed.length);
