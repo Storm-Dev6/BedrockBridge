@@ -83,8 +83,20 @@ class BedrockDatagramCodecTest {
   void compressionRoundTripsAndEnforcesLimits() {
     var compression =
         new BedrockCompressionCodec(
-            new CompressionSettings(CompressionAlgorithm.ZLIB, 0, 1024, 4096, 100));
+            new CompressionSettings(CompressionAlgorithm.ZLIB, 32, 1024, 4096, 100));
     byte[] clear = "bedrock-login".repeat(20).getBytes(java.nio.charset.StandardCharsets.UTF_8);
     assertArrayEquals(clear, compression.decompress(compression.compress(clear)));
+
+    byte[] compressedPacket = compression.compressPacket(clear);
+    assertEquals(0x00, Byte.toUnsignedInt(compressedPacket[0]));
+    assertArrayEquals(clear, compression.decompressPacket(compressedPacket));
+
+    byte[] small = "login".getBytes(StandardCharsets.UTF_8);
+    byte[] uncompressedPacket = compression.compressPacket(small);
+    assertEquals(0xFF, Byte.toUnsignedInt(uncompressedPacket[0]));
+    assertArrayEquals(small, compression.decompressPacket(uncompressedPacket));
+    assertThrows(
+        BedrockValidationException.class,
+        () -> compression.decompressPacket(new byte[] {0x01, 0x00}));
   }
 }

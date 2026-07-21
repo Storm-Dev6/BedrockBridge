@@ -55,6 +55,12 @@ packet before its first Bedrock game batch. Connected control payloads such as `
 misclassified as `0xfe` game batches. A ping receives a framed `ConnectedPong` without disturbing
 the play session.
 
+After `NetworkSettings` enables compression, protocol-1001 batches carry a per-batch algorithm
+marker between the `0xfe` game-packet identifier and the batch body. Marker `0x00` selects ZLib and
+`0xff` identifies an uncompressed body. The initial `RequestNetworkSettings` exchange predates this
+boundary and remains untagged. Both inbound and outbound connected batches now preserve that
+transition explicitly.
+
 The protocol-1001 catalog covers the documented connection-control path:
 
 - RequestNetworkSettings and NetworkSettings;

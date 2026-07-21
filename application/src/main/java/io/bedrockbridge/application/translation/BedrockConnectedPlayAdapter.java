@@ -41,6 +41,7 @@ public final class BedrockConnectedPlayAdapter implements ConnectedFrameHandler 
   private final BedrockPacketFrameCodec frames;
   private final BedrockBatchCodec batches;
   private final BedrockCompressionCodec compression;
+  private boolean compressionActive;
 
   /** Creates an adapter that selects an exact supported codec from RequestNetworkSettings. */
   public BedrockConnectedPlayAdapter(BedrockJavaSession session) {
@@ -100,11 +101,17 @@ public final class BedrockConnectedPlayAdapter implements ConnectedFrameHandler 
     }
     LOGGER.info("Bedrock clientbound batch frames={} state={}", outgoing.size(), session.state());
     byte[] batch = batches.encode(outgoing);
-    byte[] encodedBatch = compression.compress(batch);
+    boolean activateCompression =
+        outgoing.stream()
+            .anyMatch(frame -> frame.header().packetId() == BedrockPacketIds.NETWORK_SETTINGS);
+    byte[] encodedBatch = compressionActive ? compression.compressPacket(batch) : batch;
     byte[] connected = new byte[encodedBatch.length + 1];
     connected[0] = (byte) GAME_PACKET;
     System.arraycopy(encodedBatch, 0, connected, 1, encodedBatch.length);
     outbound.accept(ByteBuffer.wrap(session.encryptConnected(connected)));
+    if (activateCompression) {
+      compressionActive = true;
+    }
   }
 
   @Override
@@ -138,11 +145,7 @@ public final class BedrockConnectedPlayAdapter implements ConnectedFrameHandler 
   }
 
   private byte[] decodeBatchPayload(byte[] payload) {
-    try {
-      return compression.decompress(payload);
-    } catch (BedrockValidationException compressedFailure) {
-      return payload.clone();
-    }
+    return compressionActive ? compression.decompressPacket(payload) : payload.clone();
   }
 
   private BedrockPlayState encodingState(BedrockPlayPacket packet) {
