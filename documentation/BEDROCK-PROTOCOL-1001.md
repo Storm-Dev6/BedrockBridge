@@ -32,6 +32,11 @@ For the default bridge advertisement, the resulting UTF-8 payload is 101 bytes, 
 length prefix is `00 65`. The full value is
 `MCPE;BedrockBridge;1001;1.26.33;0;100;<guid>;BedrockBridge;Survival;1;19132;19133;0;1;0;`.
 
+The RakNet server GUID is generated from the complete nonzero 64-bit value space on each bridge
+startup and is rendered as an unsigned decimal value in the advertisement. This matches repeated
+observations of the official server and prevents clients from retaining stale compatibility state
+under a process-independent fixed server identity.
+
 A subsequent phone trace still stopped at repeated discovery pings. Windows reported the listener
 as an IPv6 wildcard socket even though `bridge.bind-address=0.0.0.0` requested IPv4. The UDP
 transport now opens the configured protocol family explicitly, retains a datagram when a

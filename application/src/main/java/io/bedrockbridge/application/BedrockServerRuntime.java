@@ -1,5 +1,6 @@
 package io.bedrockbridge.application;
 
+import io.bedrockbridge.bedrock.BedrockServerGuid;
 import io.bedrockbridge.bedrock.session.BedrockSessionBootstrap;
 import io.bedrockbridge.bedrock.session.ConnectedFrameHandler;
 import io.bedrockbridge.common.TaskScheduler;
@@ -8,6 +9,7 @@ import io.bedrockbridge.network.buffer.DirectPacketBufferPool;
 import io.bedrockbridge.network.raknet.MtuPolicy;
 import io.bedrockbridge.network.udp.NioUdpTransport;
 import java.net.InetSocketAddress;
+import java.security.SecureRandom;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.LinkedHashMap;
@@ -49,6 +51,7 @@ public final class BedrockServerRuntime implements AutoCloseable {
       throw new IllegalStateException("Bedrock server runtime already started");
     }
     try {
+      SecureRandom serverGuidRandom = new SecureRandom();
       for (int listenerPort : configuration.listenerUpstreamNames().keySet()) {
         DirectPacketBufferPool listenerBuffers =
             new DirectPacketBufferPool(65_507, configuration.maximumSessions());
@@ -64,7 +67,7 @@ public final class BedrockServerRuntime implements AutoCloseable {
                 listenerTransport,
                 scheduler,
                 clock,
-                0x4244524F434B3734L + listenerPort,
+                BedrockServerGuid.generate(serverGuidRandom),
                 configuration.maximumSessions(),
                 Duration.ofSeconds(30),
                 Duration.ofSeconds(1),

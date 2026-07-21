@@ -1,6 +1,7 @@
 package io.bedrockbridge.bedrock.login;
 
 import io.bedrockbridge.bedrock.BedrockProtocol;
+import io.bedrockbridge.bedrock.BedrockServerGuid;
 import io.bedrockbridge.bedrock.BedrockValidationException;
 import io.bedrockbridge.bedrock.packet.ConnectedPing;
 import io.bedrockbridge.bedrock.packet.ConnectedPong;
@@ -50,7 +51,7 @@ public final class BedrockLoginStateMachine {
                   + ';'
                   + BedrockProtocol.PREFERRED_PLAY_VERSION.name()
                   + ";0;100;"
-                  + serverGuid
+                  + BedrockServerGuid.formatAdvertisement(serverGuid)
                   + ";BedrockBridge;Survival;1;19132;19133;"
                   + PROTOCOL_1001_DISCOVERY_TRAILER));
     }

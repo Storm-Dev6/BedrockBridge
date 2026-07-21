@@ -71,7 +71,7 @@ class BedrockSessionTest {
         new BedrockSession(
             remote,
             codec,
-            new BedrockLoginStateMachine(7, remote, new ProtocolVersionNegotiator()),
+            new BedrockLoginStateMachine(Long.MIN_VALUE, remote, new ProtocolVersionNegotiator()),
             Duration.ofSeconds(10),
             sent::add,
             Instant.EPOCH);
@@ -89,9 +89,10 @@ class BedrockSessionTest {
         (UnconnectedPong)
             codec.decode(response, io.bedrockbridge.protocol.PacketDirection.CLIENTBOUND);
     assertEquals(1234, pong.pingTime());
-    assertEquals(7, pong.serverGuid());
+    assertEquals(Long.MIN_VALUE, pong.serverGuid());
     assertEquals(
-        "MCPE;BedrockBridge;1001;1.26.33;0;100;7;BedrockBridge;Survival;1;" + "19132;19133;0;1;0;",
+        "MCPE;BedrockBridge;1001;1.26.33;0;100;9223372036854775808;"
+            + "BedrockBridge;Survival;1;19132;19133;0;1;0;",
         pong.motd());
   }
 
