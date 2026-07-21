@@ -9,6 +9,7 @@ import io.bedrockbridge.bedrock.packet.play.LoginPacket;
 import io.bedrockbridge.bedrock.packet.play.RequestNetworkSettingsPacket;
 import io.bedrockbridge.bedrock.packet.play.ResourcePackClientResponsePacket;
 import io.bedrockbridge.bedrock.packet.play.ResourcePackResponse;
+import io.bedrockbridge.protocol.ProtocolVersion;
 import java.util.Objects;
 
 /**
@@ -18,6 +19,7 @@ import java.util.Objects;
 public final class BedrockPlayStateMachine {
   private BedrockPlayState state = BedrockPlayState.NETWORK_SETTINGS;
   private ResourcePackStage resourcePackStage = ResourcePackStage.NONE;
+  private ProtocolVersion protocolVersion;
 
   /** Applies one legal serverbound control packet without choosing outbound packet ordering. */
   public void receive(BedrockPlayPacket packet) {
@@ -67,9 +69,17 @@ public final class BedrockPlayStateMachine {
     return state;
   }
 
+  /** Returns the exact network protocol selected by RequestNetworkSettings. */
+  public ProtocolVersion protocolVersion() {
+    if (protocolVersion == null) {
+      throw violation("Bedrock network version has not been negotiated");
+    }
+    return protocolVersion;
+  }
+
   private void receiveNetworkSettings(RequestNetworkSettingsPacket request) {
     require(BedrockPlayState.NETWORK_SETTINGS);
-    requireVersion(request.clientNetworkVersion());
+    protocolVersion = BedrockProtocol.playVersion(request.clientNetworkVersion());
     state = BedrockPlayState.LOGIN;
   }
 
@@ -110,7 +120,7 @@ public final class BedrockPlayStateMachine {
   }
 
   private void requireVersion(int version) {
-    if (version != BedrockProtocol.NETWORK_PROTOCOL_748) {
+    if (!BedrockProtocol.playVersion(version).equals(protocolVersion)) {
       throw violation("Unsupported Bedrock network version: " + version);
     }
   }

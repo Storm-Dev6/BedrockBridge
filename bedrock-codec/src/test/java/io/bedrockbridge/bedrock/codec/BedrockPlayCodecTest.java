@@ -12,7 +12,6 @@ import io.bedrockbridge.bedrock.BedrockValidationException;
 import io.bedrockbridge.bedrock.packet.play.BedrockPlayPacket;
 import io.bedrockbridge.common.RegistrationException;
 import io.bedrockbridge.protocol.PacketDirection;
-import io.bedrockbridge.protocol.ProtocolVersion;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 
@@ -129,11 +128,6 @@ class BedrockPlayCodecTest {
     }
 
     @Override
-    public ProtocolVersion protocolVersion() {
-      return BedrockProtocol.PLAY_VERSION_748;
-    }
-
-    @Override
     public PacketDirection direction() {
       return PacketDirection.SERVERBOUND;
     }
@@ -143,11 +137,6 @@ class BedrockPlayCodecTest {
     @Override
     public int packetId() {
       return 193;
-    }
-
-    @Override
-    public ProtocolVersion protocolVersion() {
-      return BedrockProtocol.PLAY_VERSION_748;
     }
 
     @Override

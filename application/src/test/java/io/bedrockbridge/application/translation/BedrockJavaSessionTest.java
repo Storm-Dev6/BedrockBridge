@@ -88,7 +88,7 @@ class BedrockJavaSessionTest {
     assertEquals(BedrockPlayState.DISCONNECTING, session.state());
     assertNull(blocked.startGameFrame());
     DisconnectPacket disconnect = (DisconnectPacket) blocked.packets().getFirst();
-    assertEquals("BLOCKED_EXTERNAL_OFFICIAL_ARTIFACT", disconnect.message());
+    assertEquals("START_GAME_UNAVAILABLE_EXTERNAL_REGISTRY", disconnect.message());
   }
 
   private static JavaSessionGateway gateway(AtomicBoolean worldReady) {

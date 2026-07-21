@@ -10,6 +10,8 @@ import io.bedrockbridge.common.LifecycleException;
 import io.bedrockbridge.config.BridgeConfiguration;
 import io.bedrockbridge.observability.BridgeMetrics;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import java.net.DatagramSocket;
+import java.net.SocketException;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -40,8 +42,8 @@ class BedrockBridgeTest {
   }
 
   @Test
-  void rejectsSecondStart() {
-    var bridge = BridgeLauncher.create(configuration());
+  void rejectsSecondStart() throws SocketException {
+    var bridge = BridgeLauncher.create(configuration(availableUdpPort()));
     bridge.start();
     assertThrows(LifecycleException.class, bridge::start);
     bridge.close();
@@ -68,6 +70,17 @@ class BedrockBridgeTest {
   }
 
   private static BridgeConfiguration configuration() {
-    return new BridgeConfiguration("bridge", "0.0.0.0", 19132, "localhost", 25565, 100, 1, false);
+    return configuration(19132);
+  }
+
+  private static BridgeConfiguration configuration(int bindPort) {
+    return new BridgeConfiguration(
+        "bridge", "127.0.0.1", bindPort, "localhost", 25565, 100, 1, false);
+  }
+
+  private static int availableUdpPort() throws SocketException {
+    try (DatagramSocket socket = new DatagramSocket(0)) {
+      return socket.getLocalPort();
+    }
   }
 }

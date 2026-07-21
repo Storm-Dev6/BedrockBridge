@@ -10,6 +10,8 @@ import io.bedrockbridge.bedrock.packet.OpenConnectionReply1;
 import io.bedrockbridge.bedrock.packet.OpenConnectionReply2;
 import io.bedrockbridge.bedrock.packet.OpenConnectionRequest1;
 import io.bedrockbridge.bedrock.packet.OpenConnectionRequest2;
+import io.bedrockbridge.bedrock.packet.UnconnectedPing;
+import io.bedrockbridge.bedrock.packet.UnconnectedPong;
 import io.bedrockbridge.protocol.Packet;
 import io.bedrockbridge.protocol.PacketKey;
 import io.bedrockbridge.protocol.codec.DefaultPacketCodec;
@@ -25,6 +27,8 @@ public final class BedrockPacketRegistry {
   /** Registers every supported handshake packet ID, codec, and factory. */
   public static PacketRegistry create() {
     DynamicPacketRegistry registry = new DynamicPacketRegistry();
+    register(registry, UnconnectedPing.class, UnconnectedPing::new);
+    register(registry, UnconnectedPong.class, UnconnectedPong::new);
     register(registry, ConnectedPing.class, ConnectedPing::new);
     register(registry, ConnectedPong.class, ConnectedPong::new);
     register(registry, OpenConnectionRequest1.class, OpenConnectionRequest1::new);

@@ -44,7 +44,7 @@ public final class BridgeLauncher {
     BridgeConfiguration configuration =
         new DefaultConfigurationValidator()
             .validate(new PropertiesConfigurationLoader().load(Path.of(arguments[0])));
-    ExternalItemRegistry registry = requireExternalRegistry(configuration);
+    ExternalItemRegistry registry = optionalExternalRegistry(configuration);
     BedrockConnectedSessionFactory sessionFactory =
         productionSessionFactory(configuration, registry);
     BedrockBridge bridge =
@@ -61,13 +61,17 @@ public final class BridgeLauncher {
     }
   }
 
-  private static ExternalItemRegistry requireExternalRegistry(BridgeConfiguration configuration) {
-    if (configuration.registryPath().isBlank()
-        || configuration.registryProtocolVersion().isBlank()
-        || configuration.registrySha256().isBlank()) {
+  private static ExternalItemRegistry optionalExternalRegistry(BridgeConfiguration configuration) {
+    boolean path = !configuration.registryPath().isBlank();
+    boolean protocol = !configuration.registryProtocolVersion().isBlank();
+    boolean hash = !configuration.registrySha256().isBlank();
+    if (!path && !protocol && !hash) {
+      return null;
+    }
+    if (!path || !protocol || !hash) {
       throw new IllegalStateException(
-          "BLOCKED_EXTERNAL_OFFICIAL_ARTIFACT: configure bridge.registry-path, "
-              + "bridge.registry-protocol-version, and bridge.registry-sha256 before startup");
+          "Incomplete optional registry configuration: set bridge.registry-path, "
+              + "bridge.registry-protocol-version, and bridge.registry-sha256 together");
     }
     try {
       return RegistryCheckCli.validate(
@@ -75,8 +79,7 @@ public final class BridgeLauncher {
           configuration.registryProtocolVersion(),
           configuration.registrySha256());
     } catch (java.io.IOException | RuntimeException failure) {
-      throw new IllegalStateException(
-          "BLOCKED_EXTERNAL_OFFICIAL_ARTIFACT: external registry validation failed", failure);
+      throw new IllegalStateException("Optional external registry validation failed", failure);
     }
   }
 
@@ -102,6 +105,12 @@ public final class BridgeLauncher {
             new InMemoryReplayGuard(Math.max(8, configuration.maximumSessions() * 2)),
             Clock.systemUTC(),
             Duration.ofSeconds(30));
+    io.bedrockbridge.application.translation.BedrockJavaSession.StartGameFrameProvider
+        startGameProvider =
+            registry == null
+                ? null
+                : new RegistryBackedStartGameFrameProvider(
+                    registry, BedrockProtocolLimits.defaults(), configuration.applicationName());
     return new BedrockConnectedSessionFactory(
         BedrockProtocolLimits.defaults(),
         verifier,
@@ -120,8 +129,7 @@ public final class BridgeLauncher {
               upstream.readTimeoutMillis(),
               new io.bedrockbridge.application.translation.JavaBedrockTranslator());
         },
-        new RegistryBackedStartGameFrameProvider(
-            registry, BedrockProtocolLimits.defaults(), configuration.applicationName()));
+        startGameProvider);
   }
 
   private static Path requiredTrustedRoot(BridgeConfiguration configuration) {
@@ -140,7 +148,9 @@ public final class BridgeLauncher {
   /**
    * Creates a production composition with an explicitly supplied connected-DATA handler factory.
    * The factory is intentionally not synthesized here: callers must provide an explicit Bedrock
-   * authentication trust policy and a StartGame registry provider before accepting real clients.
+   * authentication trust policy before accepting real clients. A missing optional StartGame
+   * provider allows the listener to start but rejects the Bedrock session at the StartGame
+   * boundary.
    */
   public static BedrockBridge create(
       BridgeConfiguration configuration,

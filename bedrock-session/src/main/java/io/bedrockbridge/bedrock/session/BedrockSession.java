@@ -82,8 +82,10 @@ public final class BedrockSession {
       return;
     }
     ByteBuffer input = Objects.requireNonNull(payload, "payload").slice();
-    if (login.state() == BedrockLoginState.CONNECTED && connected != null) {
+    if (connected != null
+        && (login.state() == BedrockLoginState.CONNECTED || isRakNetDatagram(input))) {
       try {
+        lastActivity = now;
         connected.receiveDatagram(input, now);
         connected.tick(now);
       } catch (RuntimeException failure) {
@@ -96,6 +98,11 @@ public final class BedrockSession {
     Packet packet = codec.decode(input, PacketDirection.SERVERBOUND);
     lastActivity = now;
     login.handle(packet, now).ifPresent(this::send);
+    if (login.state() == BedrockLoginState.OFFLINE_ACCEPTED
+        && connected == null
+        && connectedHandler != null) {
+      connected = createConnectedSession(now);
+    }
     if (login.state() == BedrockLoginState.CONNECTED
         && connected == null
         && connectedHandler != null) {
@@ -162,8 +169,42 @@ public final class BedrockSession {
         new SplitPacketAssembler(64, 4 * 1024 * 1024, Duration.ofSeconds(10)),
         new OrderingChannels(256),
         new PacketQueue(1_024),
-        frame -> connectedHandler.handle(frame.payload(), this::sendConnected),
+        frame -> handleConnectedPayload(frame.payload()),
         now);
+  }
+
+  private void handleConnectedPayload(ByteBuffer payload) {
+    if (login.state() == BedrockLoginState.CONNECTED) {
+      connectedHandler.handle(payload, this::sendConnected);
+      return;
+    }
+    Packet packet = codec.decode(payload, PacketDirection.SERVERBOUND);
+    login
+        .handle(packet, lastActivity)
+        .ifPresent(
+            response -> {
+              if (login.state() == BedrockLoginState.CONNECTION_REQUESTED
+                  || login.state() == BedrockLoginState.CONNECTED) {
+                sendConnectedPacket(response);
+              } else {
+                send(response);
+              }
+            });
+  }
+
+  private void sendConnectedPacket(Packet packet) {
+    ByteBuffer output = ByteBuffer.allocate(2_048);
+    codec.encode(packet, output);
+    output.flip();
+    sendConnected(output.asReadOnlyBuffer());
+  }
+
+  private static boolean isRakNetDatagram(ByteBuffer input) {
+    if (!input.hasRemaining()) {
+      return false;
+    }
+    int type = Byte.toUnsignedInt(input.get(input.position()));
+    return type == 0x80 || type == 0xA0 || type == 0xC0;
   }
 
   private void sendConnected(ByteBuffer payload) {

@@ -1,5 +1,6 @@
 package io.bedrockbridge.bedrock.login;
 
+import io.bedrockbridge.bedrock.BedrockProtocol;
 import io.bedrockbridge.bedrock.BedrockValidationException;
 import io.bedrockbridge.bedrock.packet.ConnectedPing;
 import io.bedrockbridge.bedrock.packet.ConnectedPong;
@@ -11,6 +12,8 @@ import io.bedrockbridge.bedrock.packet.OpenConnectionReply1;
 import io.bedrockbridge.bedrock.packet.OpenConnectionReply2;
 import io.bedrockbridge.bedrock.packet.OpenConnectionRequest1;
 import io.bedrockbridge.bedrock.packet.OpenConnectionRequest2;
+import io.bedrockbridge.bedrock.packet.UnconnectedPing;
+import io.bedrockbridge.bedrock.packet.UnconnectedPong;
 import io.bedrockbridge.protocol.Packet;
 import java.net.InetSocketAddress;
 import java.time.Instant;
@@ -35,6 +38,20 @@ public final class BedrockLoginStateMachine {
 
   /** Applies one legal serverbound packet and returns the immediate reply when required. */
   public Optional<Packet> handle(Packet packet, Instant now) {
+    if (packet instanceof UnconnectedPing ping) {
+      require(BedrockLoginState.NEW);
+      return Optional.of(
+          new UnconnectedPong(
+              ping.pingTime(),
+              serverGuid,
+              "MCPE;BedrockBridge;"
+                  + BedrockProtocol.PREFERRED_PLAY_VERSION.protocolId()
+                  + ';'
+                  + BedrockProtocol.PREFERRED_PLAY_VERSION.name()
+                  + ";0;100;"
+                  + serverGuid
+                  + ";BedrockBridge;Survival;1;19132;19133;"));
+    }
     if (packet instanceof OpenConnectionRequest1 request) {
       require(BedrockLoginState.NEW);
       versions.negotiate(request.rakNetVersion());

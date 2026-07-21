@@ -23,9 +23,6 @@ bridge.upstream-port=25565
 bridge.maximum-sessions=100
 bridge.scheduler-threads=2
 bridge.development-mode=false
-bridge.registry-path=C:/Users/<user>/Documents/BDS/real-observation/item-registry-748.ndjson
-bridge.registry-protocol-version=748
-bridge.registry-sha256=<lowercase SHA-256 of the external artifact>
 bridge.auth-trusted-root=C:/Users/<user>/Documents/BDS/real-observation/official-root.der
 bridge.offline-auth-mode=deny
 ```
@@ -45,9 +42,19 @@ bridge.listener.19132.upstream=lobby
 bridge.listener.19133.upstream=survival
 ```
 
-The registry preflight runs before the UDP socket is opened. An absent, synthetic, malformed,
-protocol-mismatched, or hash-mismatched artifact produces
-`BLOCKED_EXTERNAL_OFFICIAL_ARTIFACT` and no listener is started.
+The registry is optional at process startup. If all three registry keys are supplied, the artifact
+is validated before the UDP socket is opened. If the keys are omitted, the listener still starts;
+the Bedrock session then disconnects at the StartGame boundary with
+`START_GAME_UNAVAILABLE_EXTERNAL_REGISTRY`. This makes the proxy lifecycle testable without
+inventing registry data, but it is not a successful Bedrock spawn.
+
+Optional registry configuration:
+
+```properties
+bridge.registry-path=C:/Users/<user>/Documents/BDS/real-observation/item-registry-748.ndjson
+bridge.registry-protocol-version=748
+bridge.registry-sha256=<lowercase SHA-256 of the external artifact>
+```
 
 ## Build and run
 
@@ -72,8 +79,10 @@ listener mapping, for example `127.0.0.1:25565`.
 The production composition now performs Bedrock login-chain validation, generates the
 server-side encryption challenge, activates the connected cipher after the client handshake,
 connects a distinct Java upstream per session, sends Java-derived PlayStatus/resource-pack flow,
-and builds a protocol-748 StartGame frame from the validated three-field external item registry.
+and, when the optional registry is configured, builds a protocol-748 StartGame frame from the
+validated three-field external item registry.
 
-The remaining external manual gate is a real Bedrock client with a valid external registry artifact
-and, in online mode, the user-supplied official trust-root public key. CI uses only synthetic
-registry fixtures and never downloads BDS or stores proprietary data.
+Without the optional registry, the remaining manual boundary is the explicit StartGame disconnect;
+the proxy does not claim that a Bedrock client has spawned. A real spawn still requires a valid
+external registry artifact and, in online mode, the user-supplied official trust-root public key.
+CI uses only synthetic registry fixtures and never downloads BDS or stores proprietary data.
