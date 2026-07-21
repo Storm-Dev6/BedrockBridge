@@ -90,7 +90,9 @@ class BedrockSessionTest {
             codec.decode(response, io.bedrockbridge.protocol.PacketDirection.CLIENTBOUND);
     assertEquals(1234, pong.pingTime());
     assertEquals(7, pong.serverGuid());
-    assertTrue(pong.motd().startsWith("MCPE;BedrockBridge;1001;1.26.30;"));
+    assertEquals(
+        "MCPE;BedrockBridge;1001;1.26.33;0;100;7;BedrockBridge;Survival;1;" + "19132;19133;0;1;0;",
+        pong.motd());
   }
 
   @Test

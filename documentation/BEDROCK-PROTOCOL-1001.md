@@ -3,14 +3,18 @@
 ## Target and clean-room provenance
 
 This work package adds an exact early-session catalog for Minecraft Bedrock network protocol
-`1001`, published by Mojang on the `r/26_u3` documentation branch for Minecraft `1.26.30` and used
-by the `26.33` hotfix client. The implementation was derived from Mojang's public packet diagrams
-and JSON schemas, without source or generated packet files from another bridge.
+`1001`, published by Mojang on the `r/26_u3` documentation branch and used by the `26.33` hotfix
+client and dedicated server. The implementation was derived from Mojang's public packet diagrams,
+JSON schemas, and an isolated observation of the official server, without source or generated
+packet files from another bridge.
 
 - Mojang protocol documentation: <https://github.com/Mojang/bedrock-protocol-docs/tree/r/26_u3>
 - inspected branch commit: `5cd260a8a3573d24cbb93332a3d278e134d43734`
 - Minecraft 26.33 hotfix notes:
   <https://feedback.minecraft.net/hc/en-us/articles/47262667617677-Minecraft-Bedrock-Edition-26-33-Hotfix-Changelog>
+- official Bedrock Dedicated Server: `bedrock-server-1.26.33.2.zip`;
+- observed server archive SHA-256:
+  `a0b0af71e398cd761d74c9d64c82681d3c65b4dc78a51e85babc953c554984e6`.
 
 ## Supported boundary
 
@@ -19,9 +23,14 @@ codec after reading `RequestNetworkSettings`. Protocol `748` remains accepted fo
 the two versions use separate registrations and fail closed for unknown network versions.
 
 The discovery response uses RakNet's unsigned 16-bit big-endian MOTD byte length. A live 26.33
-phone trace exposed the previous VarUInt prefix: the client repeated `UnconnectedPing` (`0x01`)
-without sending `OpenConnectionRequest1` (`0x05`) and reported U-000. The corrected response has
-the prefix `00 5F` before the 95-byte `MCPE;BedrockBridge;1001;...` advertisement.
+phone trace first exposed the previous VarUInt prefix. After that framing fix, the client still
+repeated `UnconnectedPing` (`0x01`) without sending `OpenConnectionRequest1` (`0x05`) and reported
+U-000. An isolated official server observation identified the remaining compatibility fields: the
+advertised version is `1.26.33`, followed by the observed trailer `0;1;0;` after the IPv6 port.
+
+For the default bridge advertisement, the resulting UTF-8 payload is 101 bytes, so its RakNet
+length prefix is `00 65`. The full value is
+`MCPE;BedrockBridge;1001;1.26.33;0;100;<guid>;BedrockBridge;Survival;1;19132;19133;0;1;0;`.
 
 The protocol-1001 catalog covers the documented connection-control path:
 
@@ -57,6 +66,5 @@ It covers exact protocol-1001 byte vectors, version mismatch rejection, both 748
 flows through encryption activation, discovery advertisement, lifecycle port isolation, Spotless,
 Checkstyle, Error Prone, unit tests, Javadoc, and the application fat JAR.
 
-The assembled JAR was also launched on an isolated UDP port and queried with a RakNet discovery
-probe. It returned packet `0x1C`, the `00 5F` length prefix, the complete 95-byte advertisement,
-and no trailing bytes. A physical 26.33 client retest remains the next external validation step.
+The assembled JAR is launched on an isolated UDP port and queried with a RakNet discovery probe
+before deployment. A physical 26.33 client retest remains the next external validation step.

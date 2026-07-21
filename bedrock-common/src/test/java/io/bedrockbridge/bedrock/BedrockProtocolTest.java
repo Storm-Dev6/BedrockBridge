@@ -19,7 +19,7 @@ class BedrockProtocolTest {
     assertEquals(748, BedrockProtocol.PLAY_VERSION_748.protocolId());
     assertEquals("1.21.40", BedrockProtocol.PLAY_VERSION_748.name());
     assertEquals(1001, BedrockProtocol.PLAY_VERSION_1001.protocolId());
-    assertEquals("1.26.30", BedrockProtocol.PLAY_VERSION_1001.name());
+    assertEquals("1.26.33", BedrockProtocol.PLAY_VERSION_1001.name());
     assertEquals(
         BedrockProtocol.PLAY_VERSION_1001,
         BedrockProtocol.playVersion(BedrockProtocol.NETWORK_PROTOCOL_1001));

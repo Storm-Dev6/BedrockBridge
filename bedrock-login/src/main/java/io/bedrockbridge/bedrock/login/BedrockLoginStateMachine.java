@@ -21,6 +21,7 @@ import java.util.Optional;
 
 /** Session-confined state machine for the RakNet portion of a Bedrock connection. */
 public final class BedrockLoginStateMachine {
+  private static final String PROTOCOL_1001_DISCOVERY_TRAILER = "0;1;0;";
   private final long serverGuid;
   private final InetSocketAddress clientAddress;
   private final ProtocolVersionNegotiator versions;
@@ -50,7 +51,8 @@ public final class BedrockLoginStateMachine {
                   + BedrockProtocol.PREFERRED_PLAY_VERSION.name()
                   + ";0;100;"
                   + serverGuid
-                  + ";BedrockBridge;Survival;1;19132;19133;"));
+                  + ";BedrockBridge;Survival;1;19132;19133;"
+                  + PROTOCOL_1001_DISCOVERY_TRAILER));
     }
     if (packet instanceof OpenConnectionRequest1 request) {
       require(BedrockLoginState.NEW);
