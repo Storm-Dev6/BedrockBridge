@@ -1,9 +1,11 @@
 package io.bedrockbridge.network.udp;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.bedrockbridge.network.buffer.DirectPacketBufferPool;
+import java.net.Inet4Address;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
@@ -15,7 +17,7 @@ import org.junit.jupiter.api.Test;
 
 class NioUdpTransportTest {
   @Test
-  void sendsBetweenTwoLoopbackTransports() throws InterruptedException {
+  void sendsBetweenTwoIpv4LoopbackTransports() throws Exception {
     var pool = new DirectPacketBufferPool(2048, 4);
     try (var receiver = transport(pool);
         var sender = transport(pool)) {
@@ -39,9 +41,20 @@ class NioUdpTransportTest {
     }
   }
 
-  private static NioUdpTransport transport(DirectPacketBufferPool pool) {
+  @Test
+  void honorsTheConfiguredIpv4AddressFamily() throws Exception {
+    var pool = new DirectPacketBufferPool(2048, 2);
+    try (var transport = transport(pool)) {
+      assertInstanceOf(Inet4Address.class, transport.localAddress().getAddress());
+    } finally {
+      pool.close();
+    }
+  }
+
+  private static NioUdpTransport transport(DirectPacketBufferPool pool)
+      throws java.net.UnknownHostException {
     return new NioUdpTransport(
-        new InetSocketAddress(InetAddress.getLoopbackAddress(), 0),
+        new InetSocketAddress(InetAddress.getByAddress(new byte[] {127, 0, 0, 1}), 0),
         2048,
         16,
         pool,

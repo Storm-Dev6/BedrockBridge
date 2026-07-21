@@ -32,6 +32,13 @@ For the default bridge advertisement, the resulting UTF-8 payload is 101 bytes, 
 length prefix is `00 65`. The full value is
 `MCPE;BedrockBridge;1001;1.26.33;0;100;<guid>;BedrockBridge;Survival;1;19132;19133;0;1;0;`.
 
+A subsequent phone trace still stopped at repeated discovery pings. Windows reported the listener
+as an IPv6 wildcard socket even though `bridge.bind-address=0.0.0.0` requested IPv4. The UDP
+transport now opens the configured protocol family explicitly, retains a datagram when a
+non-blocking send temporarily returns zero, and logs completed handshake transmissions. An
+isolated IPv4 probe verified a `127.0.0.1` listener, the complete 136-byte `0x1c` response, and a
+matching `UDP handshake datagram transmitted` record.
+
 The protocol-1001 catalog covers the documented connection-control path:
 
 - RequestNetworkSettings and NetworkSettings;
