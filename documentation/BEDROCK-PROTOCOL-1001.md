@@ -44,6 +44,11 @@ non-blocking send temporarily returns zero, and logs completed handshake transmi
 isolated IPv4 probe verified a `127.0.0.1` listener, the complete 136-byte `0x1c` response, and a
 matching `UDP handshake datagram transmitted` record.
 
+The next real-client trace completed both offline connection requests and then sent a connected
+RakNet DATA datagram with flag byte `0x84`. DATA is a flag family (`0x80` through `0x9f` when the
+ACK/NACK bits are clear), not the single value `0x80`. Connected routing and session decoding now
+classify this family before processing the embedded connection request.
+
 The protocol-1001 catalog covers the documented connection-control path:
 
 - RequestNetworkSettings and NetworkSettings;

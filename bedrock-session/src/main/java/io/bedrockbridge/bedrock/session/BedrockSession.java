@@ -6,6 +6,7 @@ import io.bedrockbridge.bedrock.login.BedrockLoginStateMachine;
 import io.bedrockbridge.network.core.UdpTransport;
 import io.bedrockbridge.network.raknet.OrderingChannels;
 import io.bedrockbridge.network.raknet.PacketQueue;
+import io.bedrockbridge.network.raknet.RakNetDatagramFlags;
 import io.bedrockbridge.network.raknet.RakNetFrame;
 import io.bedrockbridge.network.raknet.ReceiveWindow;
 import io.bedrockbridge.network.raknet.RecoveryQueue;
@@ -204,7 +205,7 @@ public final class BedrockSession {
       return false;
     }
     int type = Byte.toUnsignedInt(input.get(input.position()));
-    return type == 0x80 || type == 0xA0 || type == 0xC0;
+    return RakNetDatagramFlags.isConnected(type);
   }
 
   private void sendConnected(ByteBuffer payload) {

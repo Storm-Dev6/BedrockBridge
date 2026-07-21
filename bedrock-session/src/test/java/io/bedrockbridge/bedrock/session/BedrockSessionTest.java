@@ -160,7 +160,7 @@ class BedrockSessionTest {
   }
 
   @Test
-  void acceptsConnectionHandshakeInsideRakNetDataBeforePlayState() {
+  void acceptsConnectionHandshakeInsideFlaggedRakNetDataBeforePlayState() {
     var codec =
         new BedrockDatagramCodec(
             BedrockPacketRegistry.create(),
@@ -236,7 +236,7 @@ class BedrockSessionTest {
     codec.encode((io.bedrockbridge.protocol.Packet) packet, payload);
     payload.flip();
     ByteBuffer datagram = ByteBuffer.allocate(1500);
-    datagram.put((byte) 0x80);
+    datagram.put((byte) 0x84);
     RakNetFrameCodec.putTriad(datagram, datagramSequence);
     new RakNetFrameCodec()
         .encode(

@@ -6,6 +6,7 @@ import io.bedrockbridge.network.raknet.AckCodec;
 import io.bedrockbridge.network.raknet.AckRange;
 import io.bedrockbridge.network.raknet.OrderingChannels;
 import io.bedrockbridge.network.raknet.PacketQueue;
+import io.bedrockbridge.network.raknet.RakNetDatagramFlags;
 import io.bedrockbridge.network.raknet.RakNetFrame;
 import io.bedrockbridge.network.raknet.RakNetFrameCodec;
 import io.bedrockbridge.network.raknet.ReceiveWindow;
@@ -115,8 +116,11 @@ public final class RakNetSession {
     }
     int type = Byte.toUnsignedInt(input.get());
     try {
+      if (RakNetDatagramFlags.isData(type)) {
+        receiveData(input, now);
+        return;
+      }
       switch (type) {
-        case 0x80 -> receiveData(input, now);
         case 0xC0 -> acknowledge(ackCodec.decode(input), now);
         case 0xA0 -> negativeAcknowledge(ackCodec.decode(input), now);
         default -> disconnect(DisconnectReason.PROTOCOL_ERROR);
