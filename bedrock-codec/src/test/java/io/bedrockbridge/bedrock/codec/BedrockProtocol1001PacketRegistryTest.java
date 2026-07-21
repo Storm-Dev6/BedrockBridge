@@ -69,7 +69,7 @@ class BedrockProtocol1001PacketRegistryTest {
     assertArrayEquals(
         concat(
             bytes(0x07, 0, 0, 7),
-            "1.26.30".getBytes(StandardCharsets.UTF_8),
+            "1.26.33".getBytes(StandardCharsets.UTF_8),
             bytes(0, 0, 0, 0, 0, 0)),
         encode(emptyStack(), BedrockPlayState.RESOURCE_PACKS));
     assertArrayEquals(
@@ -129,7 +129,7 @@ class BedrockProtocol1001PacketRegistryTest {
 
   private static ResourcePackStackPacket emptyStack() {
     return new ResourcePackStackPacket(
-        false, List.of(), List.of(), "1.26.30", List.of(), false, false);
+        false, List.of(), List.of(), "1.26.33", List.of(), false, false);
   }
 
   private static byte[] bytes(int... values) {
