@@ -11,6 +11,8 @@ import io.bedrockbridge.bedrock.codec.BedrockPacketValidator;
 import io.bedrockbridge.bedrock.login.BedrockLoginState;
 import io.bedrockbridge.bedrock.login.BedrockLoginStateMachine;
 import io.bedrockbridge.bedrock.login.ProtocolVersionNegotiator;
+import io.bedrockbridge.bedrock.packet.ConnectedPing;
+import io.bedrockbridge.bedrock.packet.ConnectedPong;
 import io.bedrockbridge.bedrock.packet.ConnectionRequest;
 import io.bedrockbridge.bedrock.packet.NewIncomingConnection;
 import io.bedrockbridge.bedrock.packet.OpenConnectionRequest1;
@@ -23,6 +25,7 @@ import io.bedrockbridge.network.raknet.MtuPolicy;
 import io.bedrockbridge.network.raknet.RakNetFrame;
 import io.bedrockbridge.network.raknet.RakNetFrameCodec;
 import io.bedrockbridge.network.raknet.Reliability;
+import io.bedrockbridge.protocol.PacketDirection;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
@@ -203,9 +206,26 @@ class BedrockSessionTest {
         Instant.EPOCH.plusMillis(2));
     assertEquals(BedrockLoginState.CONNECTED, session.state());
 
+    int beforePing = transport.sent.size();
+    session.receive(
+        framed(codec, new ConnectedPing(1234), 2, 0, Reliability.UNRELIABLE),
+        Instant.EPOCH.plusMillis(3));
+    assertEquals(BedrockLoginState.CONNECTED, session.state());
+    ConnectedPong pong =
+        transport.sent.subList(beforePing, transport.sent.size()).stream()
+            .map(ByteBuffer::wrap)
+            .filter(value -> Byte.toUnsignedInt(value.get(value.position())) == 0x80)
+            .map(BedrockSessionTest::decodeFramePayload)
+            .map(value -> codec.decode(value, PacketDirection.CLIENTBOUND))
+            .filter(ConnectedPong.class::isInstance)
+            .map(ConnectedPong.class::cast)
+            .findFirst()
+            .orElseThrow();
+    assertEquals(1234, pong.pingTime());
+
     ByteBuffer play = ByteBuffer.allocate(128);
     play.put((byte) 0x80);
-    RakNetFrameCodec.putTriad(play, 2);
+    RakNetFrameCodec.putTriad(play, 3);
     new RakNetFrameCodec()
         .encode(
             new RakNetFrame(
@@ -218,7 +238,7 @@ class BedrockSessionTest {
                 ByteBuffer.wrap(new byte[] {(byte) 0xFE, 0x01})),
             play);
     play.flip();
-    session.receive(play, Instant.EPOCH.plusMillis(3));
+    session.receive(play, Instant.EPOCH.plusMillis(4));
     assertEquals(1, received.size());
     assertArrayEquals(new byte[] {(byte) 0xFE, 0x01}, received.getFirst());
   }
@@ -232,6 +252,15 @@ class BedrockSessionTest {
 
   private static ByteBuffer framed(
       BedrockDatagramCodec codec, Object packet, int datagramSequence, int frameIndex) {
+    return framed(codec, packet, datagramSequence, frameIndex, Reliability.RELIABLE_ORDERED);
+  }
+
+  private static ByteBuffer framed(
+      BedrockDatagramCodec codec,
+      Object packet,
+      int datagramSequence,
+      int frameIndex,
+      Reliability reliability) {
     ByteBuffer payload = ByteBuffer.allocate(1500);
     codec.encode((io.bedrockbridge.protocol.Packet) packet, payload);
     payload.flip();
@@ -240,11 +269,16 @@ class BedrockSessionTest {
     RakNetFrameCodec.putTriad(datagram, datagramSequence);
     new RakNetFrameCodec()
         .encode(
-            new RakNetFrame(
-                Reliability.RELIABLE_ORDERED, frameIndex, 0, frameIndex, 0, null, payload),
-            datagram);
+            new RakNetFrame(reliability, frameIndex, 0, frameIndex, 0, null, payload), datagram);
     datagram.flip();
     return datagram;
+  }
+
+  private static ByteBuffer decodeFramePayload(ByteBuffer datagram) {
+    ByteBuffer input = datagram.slice();
+    input.get();
+    RakNetFrameCodec.getTriad(input);
+    return new RakNetFrameCodec().decode(input).payload();
   }
 
   private static final class NewIncomingConnectionTestAddresses {

@@ -1,5 +1,6 @@
 package io.bedrockbridge.bedrock.session;
 
+import io.bedrockbridge.bedrock.BedrockPacketIds;
 import io.bedrockbridge.bedrock.codec.BedrockDatagramCodec;
 import io.bedrockbridge.bedrock.login.BedrockLoginState;
 import io.bedrockbridge.bedrock.login.BedrockLoginStateMachine;
@@ -92,6 +93,13 @@ public final class BedrockSession {
       } catch (RuntimeException failure) {
         connected.disconnect(io.bedrockbridge.network.session.DisconnectReason.PROTOCOL_ERROR);
         login.disconnect();
+        throw new IllegalArgumentException(
+            "Connected RakNet payload rejected: " + safeMessage(failure), failure);
+      }
+      if (connected.state() == io.bedrockbridge.network.session.SessionState.DISCONNECTED) {
+        login.disconnect();
+        throw new IllegalArgumentException(
+            "Connected RakNet datagram rejected: " + connected.disconnectReason());
       }
       lastActivity = now;
       return;
@@ -175,6 +183,15 @@ public final class BedrockSession {
   }
 
   private void handleConnectedPayload(ByteBuffer payload) {
+    if (isConnectedControl(payload)) {
+      Packet packet = codec.decode(payload, PacketDirection.SERVERBOUND);
+      login.handle(packet, lastActivity).ifPresent(this::sendConnectedPacket);
+      if (login.state() == BedrockLoginState.DISCONNECTED) {
+        connected.disconnect(io.bedrockbridge.network.session.DisconnectReason.CLIENT_REQUEST);
+        closeHandler();
+      }
+      return;
+    }
     if (login.state() == BedrockLoginState.CONNECTED) {
       connectedHandler.handle(payload, this::sendConnected);
       return;
@@ -206,6 +223,20 @@ public final class BedrockSession {
     }
     int type = Byte.toUnsignedInt(input.get(input.position()));
     return RakNetDatagramFlags.isConnected(type);
+  }
+
+  private static boolean isConnectedControl(ByteBuffer payload) {
+    if (!payload.hasRemaining()) {
+      return false;
+    }
+    int packetId = Byte.toUnsignedInt(payload.get(payload.position()));
+    return packetId == BedrockPacketIds.CONNECTED_PING
+        || packetId == BedrockPacketIds.DISCONNECT_NOTIFICATION;
+  }
+
+  private static String safeMessage(RuntimeException failure) {
+    String message = failure.getMessage();
+    return message == null || message.isBlank() ? failure.getClass().getSimpleName() : message;
   }
 
   private void sendConnected(ByteBuffer payload) {

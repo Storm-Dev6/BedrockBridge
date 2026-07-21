@@ -49,6 +49,12 @@ RakNet DATA datagram with flag byte `0x84`. DATA is a flag family (`0x80` throug
 ACK/NACK bits are clear), not the single value `0x80`. Connected routing and session decoding now
 classify this family before processing the embedded connection request.
 
+After the RakNet connection reached `CONNECTED`, the client immediately sent a connected keepalive
+packet before its first Bedrock game batch. Connected control payloads such as `ConnectedPing` and
+`DisconnectNotification` are now decoded by the RakNet control state machine instead of being
+misclassified as `0xfe` game batches. A ping receives a framed `ConnectedPong` without disturbing
+the play session.
+
 The protocol-1001 catalog covers the documented connection-control path:
 
 - RequestNetworkSettings and NetworkSettings;
